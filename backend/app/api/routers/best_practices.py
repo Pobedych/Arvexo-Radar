@@ -51,6 +51,27 @@ def _demo_practice(practice_id: str, service: EnterpriseAnalyticsService) -> dic
     return practice
 
 
+async def _resolve_practice(
+    practice_id: str,
+    repository: BestPracticeRepository,
+    service: EnterpriseAnalyticsService,
+    settings: Settings,
+) -> tuple[Any, bool]:
+    """Resolve a practice id to (practice, is_demo_source).
+
+    Prefers a real DB row so genuinely detected practices always win; falls
+    back to the built-in demo catalog when the id isn't a DB row (e.g. a
+    production deployment with no seeded/detected practices yet, viewed via
+    the UI's "demo" mode) — same fallback as list/top below.
+    """
+    if settings.environment != "demo":
+        try:
+            return await _db_practice(practice_id, repository), False
+        except BestPracticeNotFoundError:
+            pass
+    return _demo_practice(practice_id, service), True
+
+
 @router.get("", response_model=BestPracticeListResponse)
 async def list_best_practices(
     status: BestPracticeStatus | None = None,
@@ -63,32 +84,38 @@ async def list_best_practices(
     service: EnterpriseAnalyticsService = Depends(get_enterprise_analytics_service),
     settings: Settings = Depends(get_settings),
 ) -> BestPracticeListResponse:
-    if settings.environment == "demo":
-        rows = service.practices()
-        if status:
-            rows = [row for row in rows if row["status"] == status.value]
-        if department:
-            rows = [row for row in rows if row["department_origin"] == department]
-        if model:
-            rows = [row for row in rows if model in row.get("models", [])]
-        if min_impact_score is not None:
-            rows = [row for row in rows if float(row["impact_score"]) >= min_impact_score]
-        total = len(rows)
-        rows = rows[offset : offset + limit]
-        return BestPracticeListResponse(
-            items=[_response(row) for row in rows], total=total, offset=offset, limit=limit
+    if settings.environment != "demo":
+        items, total = await repository.list(
+            tenant_id=DEMO_TENANT_ID,
+            status=status,
+            department=department,
+            model=model,
+            min_impact_score=min_impact_score,
+            offset=offset,
+            limit=limit,
         )
-    items, total = await repository.list(
-        tenant_id=DEMO_TENANT_ID,
-        status=status,
-        department=department,
-        model=model,
-        min_impact_score=min_impact_score,
-        offset=offset,
-        limit=limit,
-    )
+        if total > 0:
+            return BestPracticeListResponse(
+                items=[_response(item) for item in items], total=total, offset=offset, limit=limit
+            )
+        # No practice has been detected/seeded in this tenant's DB yet —
+        # fall back to the built-in demo catalog rather than a silent empty
+        # state, since "demo" mode in the UI is explicitly asking to see
+        # what Radar looks like with data, not a bare install.
+
+    rows = service.practices()
+    if status:
+        rows = [row for row in rows if row["status"] == status.value]
+    if department:
+        rows = [row for row in rows if row["department_origin"] == department]
+    if model:
+        rows = [row for row in rows if model in row.get("models", [])]
+    if min_impact_score is not None:
+        rows = [row for row in rows if float(row["impact_score"]) >= min_impact_score]
+    total = len(rows)
+    rows = rows[offset : offset + limit]
     return BestPracticeListResponse(
-        items=[_response(item) for item in items], total=total, offset=offset, limit=limit
+        items=[_response(row) for row in rows], total=total, offset=offset, limit=limit
     )
 
 
@@ -99,10 +126,11 @@ async def top_best_practices(
     service: EnterpriseAnalyticsService = Depends(get_enterprise_analytics_service),
     settings: Settings = Depends(get_settings),
 ) -> BestPracticeTopResponse:
-    if settings.environment == "demo":
-        practices: list[Any] = service.practices()
-    else:
+    practices: list[Any] = []
+    if settings.environment != "demo":
         practices, _ = await repository.list(tenant_id=DEMO_TENANT_ID, limit=200)
+    if not practices:
+        practices = service.practices()
     practices = [item for item in practices if str(item.get("status") if isinstance(item, dict) else item.status) not in {"rejected", "archived"}]
     get = lambda item, key: item.get(key) if isinstance(item, dict) else getattr(item, key)
     new_items = sorted(practices, key=lambda item: get(item, "detected_at"), reverse=True)[:limit]
@@ -132,7 +160,7 @@ async def get_best_practice(
     service: EnterpriseAnalyticsService = Depends(get_enterprise_analytics_service),
     settings: Settings = Depends(get_settings),
 ) -> BestPracticeResponse:
-    practice = _demo_practice(practice_id, service) if settings.environment == "demo" else await _db_practice(practice_id, repository)
+    practice, _ = await _resolve_practice(practice_id, repository, service, settings)
     return _response(practice)
 
 
@@ -144,9 +172,9 @@ async def _transition(
     service: EnterpriseAnalyticsService,
     settings: Settings,
 ) -> BestPracticeResponse:
-    if settings.environment == "demo":
-        current = _demo_practice(practice_id, service)
-        current_status = current["status"]
+    practice, is_demo = await _resolve_practice(practice_id, repository, service, settings)
+    if is_demo:
+        current_status = practice["status"]
         allowed = {
             "review": {"detected", "under_review"},
             "approve": {"detected", "under_review", "approved"},
@@ -156,7 +184,6 @@ async def _transition(
         if current_status not in allowed:
             raise HTTPException(status_code=409, detail=f"Cannot {action} practice in {current_status} status")
         return _response(service.transition_practice(practice_id, action, request.actor))
-    practice = await _db_practice(practice_id, repository)
     current = BestPracticeStatus(practice.status)
     allowed_db = {
         "review": {BestPracticeStatus.DETECTED, BestPracticeStatus.UNDER_REVIEW},
@@ -197,12 +224,11 @@ async def publish_best_practice(practice_id: str, request: PracticeActionRequest
 
 @router.post("/{practice_id}/recommend", response_model=BestPracticeResponse)
 async def recommend_best_practice(practice_id: str, request: PracticeRecommendRequest, repository: BestPracticeRepository = Depends(get_best_practice_repository), service: EnterpriseAnalyticsService = Depends(get_enterprise_analytics_service), settings: Settings = Depends(get_settings)) -> BestPracticeResponse:
-    if settings.environment == "demo":
-        current = _demo_practice(practice_id, service)
-        if current["status"] not in {"approved", "published", "scaling"}:
+    practice, is_demo = await _resolve_practice(practice_id, repository, service, settings)
+    if is_demo:
+        if practice["status"] not in {"approved", "published", "scaling"}:
             raise HTTPException(status_code=409, detail="Practice must be approved before recommendation")
         return _response(service.recommend_practice(practice_id, request.departments, request.owner, request.comment))
-    practice = await _db_practice(practice_id, repository)
     if practice.status not in {BestPracticeStatus.APPROVED, BestPracticeStatus.PUBLISHED, BestPracticeStatus.SCALING}:
         raise BestPracticeStateError("Practice must be approved before recommendation.", details={})
     await repository.recommend(practice, request.departments)
