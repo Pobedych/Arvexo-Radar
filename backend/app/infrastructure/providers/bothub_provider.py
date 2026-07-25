@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 import logging
 import random
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -26,7 +28,7 @@ from app.services.llm_provider import (
     LLMResult,
 )
 
-_PROMPT_VERSION = "bothub-json-v1"
+_PROMPT_VERSION = "bothub-json-v2"
 _RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,12 @@ _OUTPUT_MODELS: dict[LLMOperation, type[BaseModel]] = {
     LLMOperation.SCENARIO_NAMING: ScenarioNamingOutput,
     LLMOperation.INSIGHT_WORDING: InsightWordingOutput,
     LLMOperation.RECOMMENDATION: RecommendationOutput,
+}
+
+_GENERATED_FIELDS: dict[LLMOperation, set[str]] = {
+    LLMOperation.SCENARIO_NAMING: {"name", "description"},
+    LLMOperation.INSIGHT_WORDING: {"statement", "limitations"},
+    LLMOperation.RECOMMENDATION: {"action", "rationale", "priority_basis"},
 }
 
 _OPERATION_INSTRUCTIONS = {
@@ -152,8 +160,10 @@ class BothubProvider:
                 response = await client.post(
                     self._endpoint, headers=attempt_headers, json=payload
                 )
-                content, response_model, usage = self._extract_content(response)
-                data = self._validate_output(operation, evidence, content)
+                content, response_model, usage, finish_reason = self._extract_content(response)
+                data = self._validate_output(
+                    operation, evidence, content, finish_reason=finish_reason
+                )
                 return LLMResult(
                     data=data,
                     provenance=LLMProvenance(
@@ -210,9 +220,7 @@ class BothubProvider:
             "task": _OPERATION_INSTRUCTIONS[operation],
             "language": locale,
             "evidence": evidence,
-            "return_schema": self._compact_schema(
-                _OUTPUT_MODELS[operation].model_json_schema()
-            ),
+            "return_schema": self._response_schema(operation),
         }
         return {
             "model": self._model,
@@ -232,7 +240,9 @@ class BothubProvider:
         }
 
     @staticmethod
-    def _extract_content(response: httpx.Response) -> tuple[Any, str | None, dict[str, int]]:
+    def _extract_content(
+        response: httpx.Response,
+    ) -> tuple[Any, str | None, dict[str, int], str | None]:
         if response.status_code >= 400:
             raise _AttemptError(
                 code=LLMErrorCode.HTTP_ERROR,
@@ -247,9 +257,13 @@ class BothubProvider:
             raise _AttemptError(code=LLMErrorCode.INVALID_RESPONSE, retryable=True)
 
         content: Any = None
+        finish_reason: str | None = None
         choices = body.get("choices")
         if isinstance(choices, list) and choices and isinstance(choices[0], dict):
             choice = choices[0]
+            raw_finish_reason = choice.get("finish_reason") or choice.get("native_finish_reason")
+            if isinstance(raw_finish_reason, str):
+                finish_reason = raw_finish_reason[:80]
             message = choice.get("message")
             if isinstance(message, dict):
                 content = message.get("content")
@@ -281,7 +295,7 @@ class BothubProvider:
             if isinstance(raw_usage, dict)
             else {}
         )
-        return content, model if isinstance(model, str) and model else None, usage
+        return content, model if isinstance(model, str) and model else None, usage, finish_reason
 
     def _bound_evidence(self, operation: LLMOperation, evidence: dict[str, Any]) -> dict[str, Any]:
         if operation is LLMOperation.SCENARIO_NAMING:
@@ -318,9 +332,19 @@ class BothubProvider:
 
     @staticmethod
     def _validate_output(
-        operation: LLMOperation, evidence: dict[str, Any], content: Any
+        operation: LLMOperation,
+        evidence: dict[str, Any],
+        content: Any,
+        *,
+        finish_reason: str | None = None,
     ) -> dict[str, Any]:
-        parsed = BothubProvider._parse_json_object(content)
+        parsed = BothubProvider._parse_json_object(content, finish_reason=finish_reason)
+        if operation is LLMOperation.INSIGHT_WORDING:
+            parsed = {
+                "type": str(evidence.get("type", "observation"))[:80],
+                "confidence": evidence.get("confidence", 0.0),
+                **parsed,
+            }
         try:
             validated = _OUTPUT_MODELS[operation].model_validate(parsed)
         except ValidationError as exc:
@@ -383,7 +407,9 @@ class BothubProvider:
         return None
 
     @staticmethod
-    def _parse_json_object(content: Any) -> dict[str, Any]:
+    def _parse_json_object(
+        content: Any, *, finish_reason: str | None = None
+    ) -> dict[str, Any]:
         if isinstance(content, dict):
             return content
         if not isinstance(content, str):
@@ -407,7 +433,53 @@ class BothubProvider:
                     return parsed
             except (json.JSONDecodeError, TypeError):
                 continue
-        raise _AttemptError(code=LLMErrorCode.INVALID_JSON, retryable=True) from None
+
+        for candidate in BothubProvider._balanced_object_candidates(normalized):
+            repaired = re.sub(r",\s*([}\]])", r"\1", candidate)
+            for value in (candidate, repaired):
+                try:
+                    parsed = ast.literal_eval(value)
+                    if isinstance(parsed, dict):
+                        return parsed
+                except (SyntaxError, ValueError, TypeError):
+                    continue
+
+        details = {"finish_reason": finish_reason} if finish_reason else {}
+        raise _AttemptError(
+            code=LLMErrorCode.INVALID_JSON,
+            retryable=True,
+            safe_details=details,
+        ) from None
+
+    @staticmethod
+    def _balanced_object_candidates(text: str) -> list[str]:
+        candidates: list[str] = []
+        for start, char in enumerate(text):
+            if char != "{":
+                continue
+            depth = 0
+            quote: str | None = None
+            escaped = False
+            for index in range(start, len(text)):
+                current = text[index]
+                if quote is not None:
+                    if escaped:
+                        escaped = False
+                    elif current == "\\":
+                        escaped = True
+                    elif current == quote:
+                        quote = None
+                    continue
+                if current in {'"', "'"}:
+                    quote = current
+                elif current == "{":
+                    depth += 1
+                elif current == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidates.append(text[start : index + 1])
+                        break
+        return candidates
 
     @staticmethod
     def _compact_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -440,6 +512,20 @@ class BothubProvider:
             return value
 
         return compact(schema)
+
+    @staticmethod
+    def _response_schema(operation: LLMOperation) -> dict[str, Any]:
+        schema = BothubProvider._compact_schema(_OUTPUT_MODELS[operation].model_json_schema())
+        generated_fields = _GENERATED_FIELDS[operation]
+        properties = schema.get("properties", {})
+        if isinstance(properties, dict):
+            schema["properties"] = {
+                name: value for name, value in properties.items() if name in generated_fields
+            }
+        required = schema.get("required", [])
+        if isinstance(required, list):
+            schema["required"] = [name for name in required if name in generated_fields]
+        return schema
 
     @staticmethod
     def _with_retry_instruction(payload: dict[str, Any]) -> dict[str, Any]:

@@ -81,13 +81,7 @@ async def test_scenario_output_is_validated_bounded_and_keeps_local_evidence() -
     assert captured["max_tokens"] == 320
     prompt = json.loads(captured["messages"][1]["content"])
     assert prompt["return_schema"]["required"] == ["name", "description"]
-    assert set(prompt["return_schema"]["properties"]) == {
-        "name",
-        "description",
-        "typical_phrasings",
-        "evidence_refs",
-        "caveats",
-    }
+    assert set(prompt["return_schema"]["properties"]) == {"name", "description"}
     assert len(prompt["evidence"]["typical_phrasings"]) == 2
 
 
@@ -158,6 +152,7 @@ async def test_invalid_json_is_retried_once() -> None:
         ),
         '"{\\"name\\":\\"Сводки\\",\\"description\\":\\"Краткие сводки.\\"}"',
         {"name": "Сводки", "description": "Краткие сводки."},
+        "{'name': 'Сводки', 'description': 'Краткие сводки.',}",
     ],
 )
 async def test_accepts_common_gemini_content_shapes(content: object) -> None:
