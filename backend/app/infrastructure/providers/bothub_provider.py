@@ -36,30 +36,6 @@ _OUTPUT_MODELS: dict[LLMOperation, type[BaseModel]] = {
     LLMOperation.RECOMMENDATION: RecommendationOutput,
 }
 
-_OUTPUT_TEMPLATES = {
-    LLMOperation.SCENARIO_NAMING: {
-        "name": "short name",
-        "description": "one sentence",
-        "typical_phrasings": [],
-        "evidence_refs": [],
-        "caveats": [],
-    },
-    LLMOperation.INSIGHT_WORDING: {
-        "type": "type",
-        "statement": "one sentence",
-        "evidence_refs": [],
-        "confidence": 0.0,
-        "limitations": [],
-    },
-    LLMOperation.RECOMMENDATION: {
-        "action": "one action",
-        "rationale": "one sentence",
-        "linked_insight_ids": [],
-        "priority_basis": "evidence basis",
-        "caveats": [],
-    },
-}
-
 _OPERATION_INSTRUCTIONS = {
     LLMOperation.SCENARIO_NAMING: (
         "Give the scenario a concise name and a factual one-sentence summary. "
@@ -168,8 +144,14 @@ class BothubProvider:
         headers: dict[str, str],
     ) -> LLMResult:
         for attempt in range(self._max_retries + 1):
+            attempt_headers = {
+                **headers,
+                "X-Idempotency-Key": f"{headers['X-Idempotency-Key']}:attempt:{attempt + 1}",
+            }
             try:
-                response = await client.post(self._endpoint, headers=headers, json=payload)
+                response = await client.post(
+                    self._endpoint, headers=attempt_headers, json=payload
+                )
                 content, response_model, usage = self._extract_content(response)
                 data = self._validate_output(operation, evidence, content)
                 return LLMResult(
@@ -207,6 +189,12 @@ class BothubProvider:
                     retryable=failure.retryable,
                     safe_details=failure.safe_details,
                 ) from None
+            if failure.code in {
+                LLMErrorCode.INVALID_RESPONSE,
+                LLMErrorCode.INVALID_JSON,
+                LLMErrorCode.SCHEMA_VALIDATION_FAILED,
+            }:
+                payload = self._with_retry_instruction(payload)
             await self._sleep(self._retry_delay(attempt))
 
         raise AssertionError("unreachable")  # pragma: no cover
@@ -222,7 +210,9 @@ class BothubProvider:
             "task": _OPERATION_INSTRUCTIONS[operation],
             "language": locale,
             "evidence": evidence,
-            "return": _OUTPUT_TEMPLATES[operation],
+            "return_schema": self._compact_schema(
+                _OUTPUT_MODELS[operation].model_json_schema()
+            ),
         }
         return {
             "model": self._model,
@@ -242,7 +232,7 @@ class BothubProvider:
         }
 
     @staticmethod
-    def _extract_content(response: httpx.Response) -> tuple[str, str | None, dict[str, int]]:
+    def _extract_content(response: httpx.Response) -> tuple[Any, str | None, dict[str, int]]:
         if response.status_code >= 400:
             raise _AttemptError(
                 code=LLMErrorCode.HTTP_ERROR,
@@ -251,14 +241,37 @@ class BothubProvider:
             )
         try:
             body = response.json()
-            choices = body["choices"]
-            content = choices[0]["message"]["content"]
-            model = body.get("model")
-            raw_usage = body.get("usage", {})
-        except (ValueError, KeyError, IndexError, TypeError):
+        except ValueError:
             raise _AttemptError(code=LLMErrorCode.INVALID_RESPONSE, retryable=True) from None
-        if not isinstance(content, str) or not content.strip():
+        if not isinstance(body, dict):
             raise _AttemptError(code=LLMErrorCode.INVALID_RESPONSE, retryable=True)
+
+        content: Any = None
+        choices = body.get("choices")
+        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+            choice = choices[0]
+            message = choice.get("message")
+            if isinstance(message, dict):
+                content = message.get("content")
+                if content in (None, ""):
+                    tool_calls = message.get("tool_calls")
+                    if isinstance(tool_calls, list) and tool_calls:
+                        first_call = tool_calls[0]
+                        if isinstance(first_call, dict):
+                            function = first_call.get("function")
+                            if isinstance(function, dict):
+                                content = function.get("arguments")
+            if content in (None, ""):
+                content = choice.get("text")
+        if content in (None, ""):
+            content = body.get("output_text")
+
+        content = BothubProvider._normalize_content(content)
+        if content in (None, ""):
+            raise _AttemptError(code=LLMErrorCode.INVALID_RESPONSE, retryable=True)
+
+        model = body.get("model")
+        raw_usage = body.get("usage", {})
         usage = (
             {
                 key: value
@@ -305,17 +318,9 @@ class BothubProvider:
 
     @staticmethod
     def _validate_output(
-        operation: LLMOperation, evidence: dict[str, Any], content: str
+        operation: LLMOperation, evidence: dict[str, Any], content: Any
     ) -> dict[str, Any]:
-        normalized = content.strip()
-        if normalized.startswith("```"):
-            lines = normalized.splitlines()
-            if len(lines) >= 3 and lines[-1].strip() == "```":
-                normalized = "\n".join(lines[1:-1])
-        try:
-            parsed = json.loads(normalized)
-        except (json.JSONDecodeError, TypeError):
-            raise _AttemptError(code=LLMErrorCode.INVALID_JSON, retryable=True) from None
+        parsed = BothubProvider._parse_json_object(content)
         try:
             validated = _OUTPUT_MODELS[operation].model_validate(parsed)
         except ValidationError as exc:
@@ -356,6 +361,101 @@ class BothubProvider:
             if not data["linked_insight_ids"]:
                 raise _AttemptError(code=LLMErrorCode.INVALID_EVIDENCE, retryable=False)
         return data
+
+    @staticmethod
+    def _normalize_content(content: Any) -> Any:
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, dict):
+            for key in ("text", "content", "output_text", "json"):
+                if key in content:
+                    return BothubProvider._normalize_content(content[key])
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                normalized = BothubProvider._normalize_content(item)
+                if isinstance(normalized, str) and normalized:
+                    parts.append(normalized)
+                elif isinstance(normalized, (dict, list)):
+                    parts.append(json.dumps(normalized, ensure_ascii=False, separators=(",", ":")))
+            return "".join(parts).strip()
+        return None
+
+    @staticmethod
+    def _parse_json_object(content: Any) -> dict[str, Any]:
+        if isinstance(content, dict):
+            return content
+        if not isinstance(content, str):
+            raise _AttemptError(code=LLMErrorCode.INVALID_JSON, retryable=True)
+
+        normalized = content.strip().lstrip("\ufeff")
+        if normalized.startswith("```"):
+            lines = normalized.splitlines()
+            if len(lines) >= 3 and lines[-1].strip() == "```":
+                normalized = "\n".join(lines[1:-1]).strip()
+
+        candidates = [normalized]
+        candidates.extend(normalized[index:] for index, char in enumerate(normalized) if char == "{")
+        decoder = json.JSONDecoder()
+        for candidate in candidates:
+            try:
+                parsed, _ = decoder.raw_decode(candidate.lstrip())
+                if isinstance(parsed, str):
+                    parsed = json.loads(parsed)
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                continue
+        raise _AttemptError(code=LLMErrorCode.INVALID_JSON, retryable=True) from None
+
+    @staticmethod
+    def _compact_schema(schema: dict[str, Any]) -> dict[str, Any]:
+        allowed = {
+            "type",
+            "properties",
+            "required",
+            "additionalProperties",
+            "items",
+            "minLength",
+            "maxLength",
+            "minimum",
+            "maximum",
+            "maxItems",
+        }
+
+        def compact(value: Any) -> Any:
+            if isinstance(value, dict):
+                result: dict[str, Any] = {}
+                for key, item in value.items():
+                    if key not in allowed:
+                        continue
+                    if key == "properties" and isinstance(item, dict):
+                        result[key] = {name: compact(field) for name, field in item.items()}
+                    else:
+                        result[key] = compact(item)
+                return result
+            if isinstance(value, list):
+                return [compact(item) for item in value]
+            return value
+
+        return compact(schema)
+
+    @staticmethod
+    def _with_retry_instruction(payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **payload,
+            "messages": [
+                *payload["messages"],
+                {
+                    "role": "user",
+                    "content": (
+                        "The previous response could not be parsed. Return exactly one JSON "
+                        "object matching return_schema, with no markdown or commentary."
+                    ),
+                },
+            ],
+        }
 
     @staticmethod
     def _string_list(value: Any, *, limit: int) -> list[str]:

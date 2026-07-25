@@ -24,7 +24,7 @@ def _settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, **values)
 
 
-def _completion(content: str, *, status: int = 200) -> httpx.Response:
+def _completion(content: object, *, status: int = 200) -> httpx.Response:
     return httpx.Response(
         status,
         json={
@@ -80,17 +80,28 @@ async def test_scenario_output_is_validated_bounded_and_keeps_local_evidence() -
     assert result.usage["total_tokens"] == 128
     assert captured["max_tokens"] == 320
     prompt = json.loads(captured["messages"][1]["content"])
-    assert "output_schema" not in prompt
+    assert prompt["return_schema"]["required"] == ["name", "description"]
+    assert set(prompt["return_schema"]["properties"]) == {
+        "name",
+        "description",
+        "typical_phrasings",
+        "evidence_refs",
+        "caveats",
+    }
     assert len(prompt["evidence"]["typical_phrasings"]) == 2
 
 
 @pytest.mark.asyncio
 async def test_invalid_json_is_retried_once() -> None:
     calls = 0
+    idempotency_keys: list[str] = []
+    payloads: list[dict] = []
 
-    def handler(_: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
+        idempotency_keys.append(request.headers["X-Idempotency-Key"])
+        payloads.append(json.loads(request.content))
         if calls == 1:
             return _completion("not-json")
         return _completion(
@@ -120,7 +131,93 @@ async def test_invalid_json_is_retried_once() -> None:
         )
 
     assert calls == 2
+    assert idempotency_keys == [
+        "run:recommendation:1:attempt:1",
+        "run:recommendation:1:attempt:2",
+    ]
+    assert len(payloads[0]["messages"]) == 2
+    assert len(payloads[1]["messages"]) == 3
+    assert "exactly one JSON object" in payloads[1]["messages"][-1]["content"]
     assert result.data["linked_insight_ids"] == ["insight:1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    [
+        [
+            {"type": "text", "text": "Here is the result:\n"},
+            {
+                "type": "text",
+                "text": '{"name":"Сводки","description":"Краткие сводки."}',
+            },
+        ],
+        (
+            "Результат модели:\n```json\n"
+            '{"name":"Сводки","description":"Краткие сводки."}\n```'
+        ),
+        '"{\\"name\\":\\"Сводки\\",\\"description\\":\\"Краткие сводки.\\"}"',
+        {"name": "Сводки", "description": "Краткие сводки."},
+    ],
+)
+async def test_accepts_common_gemini_content_shapes(content: object) -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: _completion(content))
+    ) as client:
+        provider = BothubProvider(_settings(llm_max_retries=0), client=client)
+        result = await provider.generate(
+            operation=LLMOperation.SCENARIO_NAMING,
+            schema_version="v1",
+            evidence={"typical_phrasings": ["пример"], "evidence_refs": ["scenario:1"]},
+            locale="ru-RU",
+            idempotency_key="run:scenario:shape",
+        )
+
+    assert result.data["name"] == "Сводки"
+    assert result.data["description"] == "Краткие сводки."
+
+
+@pytest.mark.asyncio
+async def test_accepts_tool_call_arguments_when_content_is_empty() -> None:
+    response = httpx.Response(
+        200,
+        json={
+            "model": "gemini-2.5-flash",
+            "choices": [
+                {
+                    "message": {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "arguments": json.dumps(
+                                        {
+                                            "name": "Сводки",
+                                            "description": "Краткие сводки.",
+                                        },
+                                        ensure_ascii=False,
+                                    )
+                                }
+                            }
+                        ],
+                    }
+                }
+            ],
+        },
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: response)
+    ) as client:
+        provider = BothubProvider(_settings(llm_max_retries=0), client=client)
+        result = await provider.generate(
+            operation=LLMOperation.SCENARIO_NAMING,
+            schema_version="v1",
+            evidence={"typical_phrasings": ["пример"], "evidence_refs": ["scenario:1"]},
+            locale="ru-RU",
+            idempotency_key="run:scenario:tool-call",
+        )
+
+    assert result.data["name"] == "Сводки"
 
 
 @pytest.mark.asyncio
