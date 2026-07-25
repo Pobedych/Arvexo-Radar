@@ -390,6 +390,36 @@ function formatPercent(share: number) {
   return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(share * 100)}%`;
 }
 
+function BarRow({
+  label,
+  sublabel,
+  value,
+  barShare,
+  tone = "default",
+}: {
+  label: string;
+  sublabel?: string;
+  value: string;
+  barShare: number;
+  tone?: "default" | "warning";
+}) {
+  return (
+    <div className="bar-row">
+      <div className="bar-row-top">
+        <span className="bar-row-label" title={label}>{label}</span>
+        <span className="bar-row-value">{value}</span>
+      </div>
+      <div className="bar-row-track">
+        <div
+          className={`bar-row-fill ${tone === "warning" ? "bar-row-fill-warning" : ""}`}
+          style={{ width: `${Math.max(Math.min(barShare, 1), 0) * 100}%` }}
+        />
+      </div>
+      {sublabel && <div className="bar-row-sublabel">{sublabel}</div>}
+    </div>
+  );
+}
+
 const LLM_DEGRADATION_LABELS: Record<string, string> = {
   LLM_PROVIDER_UNAVAILABLE: "LLM-провайдер недоступен",
   LLM_TIMEOUT: "BotHub не ответил вовремя",
@@ -445,12 +475,14 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
         <article className="panel">
           <div className="panel-heading"><h2>Топ категорий запросов</h2><p>Доля считается от {overview.denominator} классифицированных запросов</p></div>
           {overview.top_categories.length ? (
-            <div className="stat-list">
+            <div className="bar-chart">
               {overview.top_categories.map((category) => (
-                <div key={category.category_id}>
-                  <strong>{category.name}</strong>
-                  <b>{category.count} · {formatPercent(category.share)}</b>
-                </div>
+                <BarRow
+                  key={category.category_id}
+                  label={category.name}
+                  value={`${category.count} · ${formatPercent(category.share)}`}
+                  barShare={category.share}
+                />
               ))}
             </div>
           ) : <p>Категории ещё не определены.</p>}
@@ -459,12 +491,15 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
         <article className="panel">
           <div className="panel-heading"><h2>Топ сценариев использования</h2><p>Устойчивые паттерны, найденные кластеризацией</p></div>
           {overview.top_scenarios.length ? (
-            <div className="stat-list">
+            <div className="bar-chart">
               {overview.top_scenarios.map((scenario) => (
-                <div key={scenario.scenario_id}>
-                  <span><strong>{scenario.name ?? "Без названия"}</strong><small>{scenario.size} запросов · {formatPercent(scenario.share)}</small></span>
-                  <b>{scenario.is_noise ? "шум" : scenario.generation_status}</b>
-                </div>
+                <BarRow
+                  key={scenario.scenario_id}
+                  label={scenario.name ?? "Без названия"}
+                  sublabel={scenario.is_noise ? "шум" : scenario.generation_status}
+                  value={`${scenario.size} · ${formatPercent(scenario.share)}`}
+                  barShare={scenario.share}
+                />
               ))}
             </div>
           ) : <p>Сценарии ещё не сгруппированы.</p>}
@@ -475,13 +510,20 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
         <article className="panel">
           <div className="panel-heading"><h2>Проблемы и находки</h2><p>Prompt health и security сигналы</p></div>
           {overview.top_findings.length ? (
-            <div className="stat-list">
-              {overview.top_findings.map((finding) => (
-                <div key={finding.rule_id}>
-                  <span><strong>{finding.rule_id}</strong><small>{finding.type} · {finding.severity}</small></span>
-                  <b>{finding.count}</b>
-                </div>
-              ))}
+            <div className="bar-chart">
+              {(() => {
+                const maxCount = Math.max(...overview.top_findings.map((f) => f.count), 1);
+                return overview.top_findings.map((finding) => (
+                  <BarRow
+                    key={finding.rule_id}
+                    label={finding.rule_id}
+                    sublabel={`${finding.type} · ${finding.severity}`}
+                    value={String(finding.count)}
+                    barShare={finding.count / maxCount}
+                    tone={finding.severity === "high" || finding.severity === "critical" ? "warning" : "default"}
+                  />
+                ));
+              })()}
             </div>
           ) : <p>Находок не обнаружено.</p>}
         </article>
