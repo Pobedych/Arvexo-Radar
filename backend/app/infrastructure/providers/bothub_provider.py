@@ -97,7 +97,7 @@ class BothubProvider:
             base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
         )
         self._api_key = secret.get_secret_value().strip()
-        self._model = settings.bothub_structured_model
+        self._model = settings.bothub_model
         self._timeout = settings.llm_timeout_seconds
         self._max_retries = settings.llm_max_retries
         self._max_output_tokens = settings.llm_max_output_tokens
@@ -253,6 +253,10 @@ class BothubProvider:
             "model": self._model,
             "temperature": 0.1,
             "max_tokens": self._max_output_tokens,
+            # Gemini 2.5 Flash uses a dynamic thinking budget by default. These
+            # bounded wording tasks need no chain-of-thought; disabling it
+            # prevents reasoning tokens from consuming the JSON output budget.
+            "reasoning_effort": "none",
             "response_format": {"type": "json_object"},
             "messages": [
                 {
