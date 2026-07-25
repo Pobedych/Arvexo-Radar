@@ -1,0 +1,42 @@
+[project]
+name = "arvexo-radar-backend"
+version = "0.1.0"
+description = "Arvexo Radar backend: API, worker and AI pipeline"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "asyncpg>=0.29",
+    "psycopg[binary]>=3.1",
+    "pgvector>=0.3",
+    "python-multipart>=0.0.9",
+    "fpdf2>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "ruff>=0.5",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# B008: FastAPI's Depends()/File()/Query() in argument defaults is the
+# idiomatic, documented pattern, not a real "call in default" bug.
+per-file-ignores = { "app/api/routers/*.py" = ["B008"], "app/api/deps.py" = ["B008"] }

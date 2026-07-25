@@ -1,1 +1,24 @@
 /tmp
+
+# env
+.env
+.env.local
+
+# python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# node
+node_modules/
+.next/
+frontend/dist/
+
+# data
+/data/
+
+# standalone design prototypes
+/dashboard-prototype/
