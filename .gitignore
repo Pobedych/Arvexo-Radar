@@ -16,9 +16,26 @@ __pycache__/
 node_modules/
 .next/
 frontend/dist/
+*.tsbuildinfo
+
+# local UI verification artifacts
+.playwright-cli/
+output/playwright/
 
 # data
 /data/
 
 # standalone design prototypes
 /dashboard-prototype/
+
+.supergoal
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# deploy artifacts
+deploy_key
+deploy_key.pub
