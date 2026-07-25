@@ -113,6 +113,75 @@ const statusLabels: Record<BestPracticeStatus, string> = {
   archived: "В архиве",
 };
 
+const runStatusLabels: Record<string, string> = {
+  queued: "в очереди",
+  running: "в обработке",
+  completed: "завершён",
+  degraded: "завершён с ограничениями",
+  failed: "завершён с ошибкой",
+  cancelled: "отменён",
+};
+
+const generationStatusLabels: Record<string, string> = {
+  pending: "ожидает обработки",
+  generated: "название сформировано",
+  completed: "готово",
+  degraded: "название требует уточнения",
+  failed: "ошибка формирования",
+};
+
+const findingLabels: Record<string, string> = {
+  SEC_SENSITIVE_DATA: "Возможные чувствительные данные",
+  PH_TOO_LONG: "Слишком длинные запросы",
+};
+
+const findingTypeLabels: Record<string, string> = {
+  security: "Безопасность",
+  prompt_health: "Качество запроса",
+};
+
+const severityLabels: Record<string, string> = {
+  low: "низкий приоритет",
+  medium: "средний приоритет",
+  high: "высокий приоритет",
+  critical: "критический приоритет",
+};
+
+const limitationLabels: Record<string, string> = {
+  classification_uses_keyword_fallback: "Категории определены по ключевым словам",
+  clustering_uses_placeholder_embeddings: "Сценарии сгруппированы по упрощённым признакам",
+  run_degraded_llm_wording_partial: "Часть формулировок создана без помощи языковой модели",
+};
+
+function formatRunStatus(status: string) {
+  return runStatusLabels[status] ?? status;
+}
+
+function formatGenerationStatus(status: string) {
+  return generationStatusLabels[status] ?? status;
+}
+
+function formatFindingLabel(ruleId: string) {
+  return findingLabels[ruleId] ?? ruleId.replaceAll("_", " ");
+}
+
+function formatFindingMeta(type: string, severity: string) {
+  return `${findingTypeLabels[type] ?? type} · ${severityLabels[severity] ?? severity}`;
+}
+
+function formatScenarioName(name: string | null | undefined, index: number) {
+  if (!name || /^cluster\s*\d+$/i.test(name) || /^кластер\s*\d+$/i.test(name)) return `Сценарий ${index + 1}`;
+  return name;
+}
+
+function formatInsightStatement(statement: string) {
+  return statement.replace(/^(observation|hypothesis|наблюдение|гипотеза):\s*/i, "");
+}
+
+function formatLimitation(limitation: string) {
+  return limitationLabels[limitation] ?? limitation.replaceAll("_", " ");
+}
+
 function formatHours(value: number) {
   return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value)} ч`;
 }
@@ -229,14 +298,14 @@ function ReportsView({
         <div className="data-view-icon"><FileText size={24} /></div>
         <div>
           {run ? (
-            <div className="data-row">
+            <div className="data-row report-row">
               <strong>PDF-отчёт по текущему прогону анализа</strong>
               <span>
                 {reportAvailable
                   ? run.status === "degraded"
                     ? "Готов с ограничениями — часть LLM-блоков недоступна"
                     : "Готов к формированию"
-                  : `Статус прогона: ${run.status}`}
+                  : `Статус прогона: ${formatRunStatus(run.status)}`}
               </span>
               <button
                 type="button"
@@ -452,11 +521,12 @@ function formatDegradations(degradations: RunOverview["degradations"]) {
 
 function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverview; onRequestUpload: () => void }) {
   return (
-    <section>
-      <div className="page-heading">
+    <section className="dataset-overview">
+      <div className="page-heading dataset-page-heading">
         <div>
+          <span className="dataset-eyebrow">Анализ загруженного датасета</span>
           <h1>Обзор запросов к ИИ-агенту</h1>
-          <p>Рассчитано по вашему загруженному датасету — {overview.total_records} запросов, прогон {overview.status}.</p>
+          <p>{overview.total_records} запросов обработано · прогон {formatRunStatus(overview.status)}</p>
         </div>
         <button type="button" className="secondary-button" onClick={onRequestUpload}>
           <Database size={16} />
@@ -465,36 +535,43 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
       </div>
 
       {overview.degradations.length > 0 && (
-        <div className="demo-banner" role="status">
-          <WarningCircle size={18} weight="fill" />
-          Часть стадий анализа деградировала: {formatDegradations(overview.degradations)}
+        <div className="analysis-notice" role="status">
+          <span className="analysis-notice-icon"><WarningCircle size={18} weight="fill" /></span>
+          <div>
+            <strong>Результаты готовы, но требуют проверки</strong>
+            <p>Часть анализа выполнена в упрощённом режиме: {formatDegradations(overview.degradations)}.</p>
+          </div>
         </div>
       )}
 
       <section className="kpi-section" aria-label="Ключевые показатели датасета">
         <div className="metric-grid usage-grid">
-          <article className="metric-card primary-metric">
-            <div className="metric-label"><span>Обработано запросов</span></div>
+          <article className="metric-card dataset-metric primary-metric">
+            <div className="metric-label"><span>Запросы</span><Database size={17} /></div>
             <strong>{overview.total_records}</strong>
+            <span className="metric-footnote">все строки датасета</span>
           </article>
-          <article className="metric-card">
-            <div className="metric-label"><span>Категорий найдено</span></div>
+          <article className="metric-card dataset-metric">
+            <div className="metric-label"><span>Категории</span><List size={17} /></div>
             <strong>{overview.top_categories.length}</strong>
+            <span className="metric-footnote">тематических групп</span>
           </article>
-          <article className="metric-card">
-            <div className="metric-label"><span>Устойчивых сценариев</span></div>
+          <article className="metric-card dataset-metric">
+            <div className="metric-label"><span>Сценарии</span><Sparkle size={17} /></div>
             <strong>{overview.top_scenarios.filter((s) => !s.is_noise).length}</strong>
+            <span className="metric-footnote">повторяющийся паттерн</span>
           </article>
-          <article className="metric-card">
-            <div className="metric-label"><span>Находок prompt health/security</span></div>
+          <article className="metric-card dataset-metric finding-metric">
+            <div className="metric-label"><span>Сигналы риска</span><WarningCircle size={17} /></div>
             <strong>{overview.top_findings.reduce((sum, f) => sum + f.count, 0)}</strong>
+            <span className="metric-footnote">срабатывания правил могут пересекаться</span>
           </article>
         </div>
       </section>
 
-      <div className="panel-grid">
-        <article className="panel">
-          <div className="panel-heading"><h2>Топ категорий запросов</h2><p>Доля считается от {overview.denominator} классифицированных запросов</p></div>
+      <div className="panel-grid dataset-primary-grid">
+        <article className="panel dataset-insights-panel dataset-categories-panel">
+          <div className="panel-heading"><div><span className="panel-kicker">Структура спроса</span><h2>Категории запросов</h2></div><p>Доля от {overview.denominator} классифицированных запросов</p></div>
           {overview.top_categories.length ? (
             <div className="bar-chart">
               {overview.top_categories.map((category) => (
@@ -509,15 +586,15 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
           ) : <p>Категории ещё не определены.</p>}
         </article>
 
-        <article className="panel">
-          <div className="panel-heading"><h2>Топ сценариев использования</h2><p>Устойчивые паттерны, найденные кластеризацией</p></div>
+        <article className="panel dataset-insights-panel dataset-scenarios-panel">
+          <div className="panel-heading"><div><span className="panel-kicker">Повторяемость</span><h2>Сценарии использования</h2></div><p>Паттерны, найденные автоматической группировкой</p></div>
           {overview.top_scenarios.length ? (
             <div className="bar-chart">
-              {overview.top_scenarios.map((scenario) => (
+              {overview.top_scenarios.map((scenario, index) => (
                 <BarRow
                   key={scenario.scenario_id}
-                  label={scenario.name ?? "Без названия"}
-                  sublabel={scenario.is_noise ? "шум" : scenario.generation_status}
+                  label={formatScenarioName(scenario.name, index)}
+                  sublabel={scenario.is_noise ? "шум" : formatGenerationStatus(scenario.generation_status)}
                   value={`${scenario.size} · ${formatPercent(scenario.share)}`}
                   barShare={scenario.share}
                 />
@@ -527,9 +604,9 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
         </article>
       </div>
 
-      <div className="panel-grid">
-        <article className="panel">
-          <div className="panel-heading"><h2>Проблемы и находки</h2><p>Prompt health и security сигналы</p></div>
+      <div className="panel-grid dataset-secondary-grid">
+        <article className="panel dataset-insights-panel dataset-findings-panel">
+          <div className="panel-heading"><div><span className="panel-kicker">Контроль качества</span><h2>Проблемы и риски</h2></div><p>Сигналы качества запросов и безопасности</p></div>
           {overview.top_findings.length ? (
             <div className="bar-chart">
               {(() => {
@@ -537,8 +614,8 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
                 return overview.top_findings.map((finding) => (
                   <BarRow
                     key={finding.rule_id}
-                    label={finding.rule_id}
-                    sublabel={`${finding.type} · ${finding.severity}`}
+                    label={formatFindingLabel(finding.rule_id)}
+                    sublabel={formatFindingMeta(finding.type, finding.severity)}
                     value={String(finding.count)}
                     barShare={finding.count / maxCount}
                     tone={finding.severity === "high" || finding.severity === "critical" ? "warning" : "default"}
@@ -549,14 +626,15 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
           ) : <p>Находок не обнаружено.</p>}
         </article>
 
-        <article className="panel">
-          <div className="panel-heading"><h2>Инсайты и рекомендации</h2><p>Evidence-backed выводы по датасету</p></div>
+        <article className="panel dataset-insights-panel dataset-insights-summary">
+          <div className="panel-heading"><div><span className="panel-kicker">Что важно</span><h2>Выводы и рекомендации</h2></div><p>Наблюдения, подтверждённые данными</p></div>
           {overview.insights.length ? (
             <ul className="insight-list">
               {overview.insights.map((insight) => (
-                <li key={insight.insight_id}>
-                  <strong>{insight.type === "observation" ? "Observation" : "Hypothesis"}:</strong> {insight.statement}
-                  <small> (доверие {Math.round(insight.confidence * 100)}%, evidence {insight.evidence_refs.length})</small>
+                <li className="insight-item" key={insight.insight_id}>
+                  <span className="insight-type">{insight.type === "observation" ? "Наблюдение" : "Гипотеза"}</span>
+                  <p>{formatInsightStatement(insight.statement)}</p>
+                  <small>Уверенность {Math.round(insight.confidence * 100)}% · подтверждений {insight.evidence_refs.length}</small>
                 </li>
               ))}
             </ul>
@@ -564,8 +642,10 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
           {overview.recommendations.length > 0 && (
             <ul className="insight-list">
               {overview.recommendations.map((recommendation) => (
-                <li key={recommendation.recommendation_id}>
-                  <strong>Рекомендация:</strong> {recommendation.action} — <small>{recommendation.rationale}</small>
+                <li className="insight-item recommendation-item" key={recommendation.recommendation_id}>
+                  <span className="insight-type">Рекомендация</span>
+                  <p>{recommendation.action}</p>
+                  <small>{recommendation.rationale}</small>
                 </li>
               ))}
             </ul>
@@ -574,16 +654,56 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
       </div>
 
       {overview.limitations.length > 0 && (
-        <article className="panel">
-          <div className="panel-heading"><h2>Ограничения</h2></div>
-          <ul className="insight-list">{overview.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul>
+        <article className="limitations-panel">
+          <div><span className="panel-kicker">Методика</span><h2>Что учитывать при интерпретации</h2></div>
+          <ul>{overview.limitations.map((limitation) => <li key={limitation}>{formatLimitation(limitation)}</li>)}</ul>
         </article>
       )}
     </section>
   );
 }
 
+function WelcomeScreen({
+  onChooseDemo,
+  onChooseUpload,
+}: {
+  onChooseDemo: () => void;
+  onChooseUpload: () => void;
+}) {
+  return (
+    <div className="welcome-screen">
+      <div className="welcome-card">
+        <span className="brand welcome-brand"><span>R</span>Radar</span>
+        <h1>Промпт-радар для ИИ-агентов</h1>
+        <p>
+          Классифицирует запросы пользователей к ИИ-агенту, находит устойчивые сценарии
+          использования и показывает, где агент реально экономит время, а где ломается.
+        </p>
+        <div className="welcome-options">
+          <button type="button" className="welcome-option" onClick={onChooseUpload}>
+            <span className="welcome-option-icon"><Database size={22} /></span>
+            <span className="welcome-option-body">
+              <strong>Загрузить свой датасет</strong>
+              <span>CSV с запросами к ИИ-агенту — получите категории, сценарии и инсайты по вашим данным</span>
+            </span>
+            <CaretRight size={18} className="welcome-option-arrow" />
+          </button>
+          <button type="button" className="welcome-option" onClick={onChooseDemo}>
+            <span className="welcome-option-icon welcome-option-icon-demo"><Sparkle size={22} weight="fill" /></span>
+            <span className="welcome-option-body">
+              <strong>Посмотреть демо</strong>
+              <span>Пример дашборда на синтетическом наборе: агенты, подразделения, ROI, лучшие практики</span>
+            </span>
+            <CaretRight size={18} className="welcome-option-arrow" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RadarDashboard() {
+  const [mode, setMode] = useState<"choose" | "demo" | "real">("choose");
   const [view, setView] = useState<View>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -615,7 +735,8 @@ export function RadarDashboard() {
   // say so plainly instead of quietly rendering fake figures as if real.
   const enterpriseApiUnavailable = [overviewQuery, agentsQuery, departmentsQuery, toolsQuery, methodologyQuery].some((query) => query.data && query.data.data === null);
 
-  const navigate = (next: View) => { setView(next); setSidebarOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const navigate = (next: View) => { setView(next); setSidebarOpen(false); window.scrollTo({ top: 0, behavior: "auto" }); };
+  const openUpload = () => { setMode("real"); setUploadOpen(true); };
   const handleRecommend = async (practice: BestPractice) => {
     setPendingId(practice.id);
     try {
@@ -647,10 +768,10 @@ export function RadarDashboard() {
     if (view === "overview") {
       if (currentRun) {
         if (runOverviewQuery.isLoading) return <LoadingState />;
-        if (runOverviewQuery.data) return <DatasetInsightsView overview={runOverviewQuery.data} onRequestUpload={() => setUploadOpen(true)} />;
-        return <DataUnavailable title="Не удалось получить статистику по прогону" reason="Проверьте, что backend и база данных доступны, и попробуйте загрузить датасет ещё раз." onRequestUpload={() => setUploadOpen(true)} />;
+        if (runOverviewQuery.data) return <DatasetInsightsView overview={runOverviewQuery.data} onRequestUpload={openUpload} />;
+        return <DataUnavailable title="Не удалось получить статистику по прогону" reason="Проверьте, что backend и база данных доступны, и попробуйте загрузить датасет ещё раз." onRequestUpload={openUpload} />;
       }
-      return <DataUnavailable title="Пока нет статистики" reason="Загрузите CSV с запросами пользователей к ИИ-агенту, чтобы увидеть реальные категории, сценарии и инсайты." onRequestUpload={() => setUploadOpen(true)} />;
+      return <DataUnavailable title="Пока нет статистики" reason="Загрузите CSV с запросами пользователей к ИИ-агенту, чтобы увидеть реальные категории, сценарии и инсайты." onRequestUpload={openUpload} />;
     }
     if (practiceQuery.isLoading || overviewQuery.isLoading || agentsQuery.isLoading) return <LoadingState />;
     if (view === "efficiency") return overviewQuery.data?.data && agentsQuery.data?.data ? <EfficiencyView overview={overviewQuery.data.data} agents={agentsQuery.data.data.items} /> : <DataUnavailable title="Эффективность ИИ недоступна" reason={overviewQuery.data?.error ?? agentsQuery.data?.error} />;
@@ -660,8 +781,12 @@ export function RadarDashboard() {
     if (view === "insights") return overviewQuery.data?.data ? <InsightsView overview={overviewQuery.data.data} /> : <DataUnavailable title="Инсайты недоступны" reason={overviewQuery.data?.error} />;
     if (view === "sources") return toolsQuery.data?.data && overviewQuery.data?.data ? <SourcesView tools={toolsQuery.data.data} overview={overviewQuery.data.data} /> : <DataUnavailable title="Источники данных недоступны" reason={toolsQuery.data?.error ?? overviewQuery.data?.error} />;
     if (view === "methodology") return methodologyQuery.data?.data ? <MethodologyView initial={methodologyQuery.data.data} /> : <DataUnavailable title="Настройки методики недоступны" reason={methodologyQuery.data?.error} />;
-    return <ReportsView run={currentRun} onRequestUpload={() => setUploadOpen(true)} />;
+    return <ReportsView run={currentRun} onRequestUpload={openUpload} />;
   };
+
+  if (mode === "choose") {
+    return <WelcomeScreen onChooseDemo={() => setMode("demo")} onChooseUpload={openUpload} />;
+  }
 
   return <div className="app-shell">
     {uploadOpen && (
@@ -681,14 +806,14 @@ export function RadarDashboard() {
       />
     )}
     <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-      <div className="brand-row"><button type="button" className="brand" onClick={() => navigate("overview")}><span>R</span>Radar</button><button type="button" className="icon-button mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Закрыть меню"><X size={20} /></button></div>
+      <div className="brand-row"><button type="button" className="brand" onClick={() => setMode("choose")}><span>R</span>Radar</button><button type="button" className="icon-button mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Закрыть меню"><X size={20} /></button></div>
       <nav className="navigation" aria-label="Основная навигация">{navGroups.map((group) => <div className="nav-group" key={group.label}><p>{group.label}</p>{group.items.map((item) => { const Icon = item.icon; return <button type="button" className={`nav-item ${view === item.id ? "active" : ""}`} onClick={() => navigate(item.id)} key={item.id}><Icon size={18} /><span>{item.label}</span>{item.id === "best-practices" && practices.filter((practice) => practice.status === "detected").length > 0 && <b>{practices.filter((practice) => practice.status === "detected").length}</b>}</button>; })}</div>)}</nav>
       <div className="sidebar-footer"><button type="button" className="workspace-button" onClick={() => setWorkspaceOpen((open) => !open)} aria-expanded={workspaceOpen}><span className="workspace-avatar">RD</span><span><strong>Arvexo Radar</strong><small>Рабочее пространство</small></span><CaretDown size={15} /></button>{workspaceOpen && <div className="workspace-menu"><button type="button"><span className="workspace-avatar small">RD</span>Arvexo Radar<CheckCircle size={15} weight="fill" /></button><button type="button"><span className="workspace-avatar small muted">ПС</span>Песочница</button></div>}</div>
     </aside>
     {sidebarOpen && <button className="scrim" aria-label="Закрыть меню" onClick={() => setSidebarOpen(false)} />}
 
     <main className="main-content">
-      <header className="topbar"><div className="topbar-left"><button type="button" className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню"><List size={20} /></button><div className="breadcrumb"><span>Рабочее пространство</span><CaretRight size={12} /><span>Июль 2026</span><CaretRight size={12} /><strong>{viewTitles[view]}</strong></div></div><div className="topbar-actions"><button type="button" className="secondary-button" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><FunnelSimple size={16} />Фильтры<span>{Object.values(filters).filter(Boolean).length}</span></button><button type="button" className="secondary-button" onClick={() => setUploadOpen(true)}><Database size={16} />Загрузить датасет</button><button type="button" className="primary-button" onClick={exportReport}><DownloadSimple size={16} />Экспорт отчёта</button><span className="user-avatar" aria-label="Профиль пользователя">U</span></div></header>
+      <header className="topbar"><div className="topbar-left"><button type="button" className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню"><List size={20} /></button><div className="breadcrumb"><span>Рабочее пространство</span><CaretRight size={12} /><span>Июль 2026</span><CaretRight size={12} /><strong>{viewTitles[view]}</strong></div></div><div className="topbar-actions"><button type="button" className="secondary-button" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><FunnelSimple size={16} />Фильтры<span>{Object.values(filters).filter(Boolean).length}</span></button><button type="button" className="secondary-button" onClick={openUpload}><Database size={16} />Загрузить датасет</button><button type="button" className="primary-button" onClick={exportReport}><DownloadSimple size={16} />Экспорт отчёта</button><span className="user-avatar" aria-label="Профиль пользователя">U</span></div></header>
       {filtersOpen && <section className="filter-panel enterprise-filters"><label><span>С</span><input type="date" value={filters.date_from ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_from: event.target.value }))}/></label><label><span>По</span><input type="date" value={filters.date_to ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_to: event.target.value }))}/></label><label><span>Подразделение</span><select value={filters.department ?? ""} onChange={(event) => setFilters((old) => ({ ...old, department: event.target.value }))}><option value="">Все</option><option>Юридический отдел</option><option>Финансы</option><option>Продажи</option><option>HR</option><option>ИТ</option></select></label><label><span>Роль</span><select value={filters.role ?? ""} onChange={(event) => setFilters((old) => ({ ...old, role: event.target.value }))}><option value="">Все</option><option>Юрист</option><option>Аналитик</option><option>Менеджер по продажам</option><option>HR-партнёр</option></select></label><label><span>Пользователь (hash)</span><input value={filters.user ?? ""} onChange={(event) => setFilters((old) => ({ ...old, user: event.target.value }))} placeholder="user_id_hash" /></label><label><span>Агент</span><select value={filters.agent ?? ""} onChange={(event) => setFilters((old) => ({ ...old, agent: event.target.value }))}><option value="">Все</option>{agentsQuery.data?.data?.items.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></label><label><span>Модель</span><select value={filters.model ?? ""} onChange={(event) => setFilters((old) => ({ ...old, model: event.target.value }))}><option value="">Все</option><option>GigaChat Pro</option><option>YandexGPT 5 Pro</option><option>Corporate LLM 70B</option></select></label><label><span>Сценарий</span><select value={filters.scenario ?? ""} onChange={(event) => setFilters((old) => ({ ...old, scenario: event.target.value }))}><option value="">Все</option><option value="contract-review">Проверка договоров</option><option value="management-report">Управленческий отчёт</option><option value="crm-followup">Follow-up в CRM</option></select></label><label><span>Инструмент</span><select value={filters.tool ?? ""} onChange={(event) => setFilters((old) => ({ ...old, tool: event.target.value }))}><option value="">Все</option><option>Корпоративные документы</option><option>CRM</option><option>Почта</option><option>Браузер</option></select></label><button type="button" className="text-button" onClick={() => setFiltersOpen(false)}>Готово</button><button type="button" className="text-button muted" onClick={() => setFilters({ date_from: "2026-07-01", date_to: "2026-08-01" })}>Сбросить</button></section>}
       <div className="page-content">
         {enterpriseApiUnavailable && view !== "overview" && view !== "reports" && (
@@ -700,7 +825,7 @@ export function RadarDashboard() {
         {renderMainView()}
         {currentRun && runOverviewQuery.data && (
           <footer className="page-footer">
-            <span>Прогон {currentRun.run_id.slice(0, 8)} · статус {currentRun.status}</span>
+            <span>Прогон {currentRun.run_id.slice(0, 8)} · {formatRunStatus(currentRun.status)}</span>
             <span>Записей {runOverviewQuery.data.total_records} · Категорий {runOverviewQuery.data.top_categories.length} · Сценариев {runOverviewQuery.data.top_scenarios.length}</span>
           </footer>
         )}
