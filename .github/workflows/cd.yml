@@ -188,11 +188,28 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          script_stop: true
+          script_stop: false
           script: |
-            set -euo pipefail
+            set -uo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
             API_PORT="$(grep -E '^API_HOST_PORT=' .env | cut -d= -f2)"
             API_PORT="${API_PORT:-38000}"
-            curl -fsS "http://127.0.0.1:${API_PORT}/api/v1/health"
-            curl -fsS "http://127.0.0.1:${API_PORT}/api/v1/ready"
+
+            # `docker compose up -d` returns as soon as containers are
+            # created, not once uvicorn is actually accepting connections —
+            # the api container's own entrypoint still has to finish
+            # `alembic upgrade head` first. Retry instead of racing it.
+            for i in $(seq 1 15); do
+              if curl -fsS "http://127.0.0.1:${API_PORT}/api/v1/health" \
+                 && curl -fsS "http://127.0.0.1:${API_PORT}/api/v1/ready"; then
+                echo "API healthy after ${i} attempt(s)."
+                exit 0
+              fi
+              echo "Attempt ${i}/15: API not ready yet, retrying in 3s..."
+              sleep 3
+            done
+
+            echo "::error::API did not become healthy within 45s"
+            docker compose -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.prod.yml logs --tail=80 api
+            exit 1
