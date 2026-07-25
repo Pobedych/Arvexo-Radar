@@ -5,7 +5,7 @@
 Arvexo Radar — Enterprise AI Analytics Platform для анализа журналов запросов к корпоративным AI-агентам. Платформа классифицирует запросы, обнаруживает устойчивые use cases, объясняет результаты, выявляет prompt-health/security signals и формирует evidence-backed рекомендации для CTO и AI Platform Owner.
 
 **Текущая версия:** v0.1.0 — Hackathon MVP
-**Статус:** documentation-first; backend/frontend skeleton в разработке
+**Статус:** backend MVP и интерактивный Dashboard реализованы
 **Целевой домен:** `radar.arvexo.ru`
 **Исходный кейс:** КРОК
 
@@ -27,10 +27,53 @@ Upload
 → Classification
 → Scenario Clustering
 → Scenario Naming and Summarization
+→ Best Practice Detection
 → Business Insights
 → Executive Dashboard
 → PDF Report
 ```
+
+## AI Best Practices и Knowledge Discovery
+
+Модуль автоматически превращает сильные повторяемые AI-сценарии в управляемый каталог знаний компании. После именования сценариев worker агрегирует только безопасные метаданные участников кластера и передаёт их классификатору через интерфейс `BestPracticeClassifier`. В MVP используется `RuleBasedBestPracticeClassifier`; позже его можно заменить AI-классификатором без изменения БД, API и Dashboard.
+
+### Impact Score
+
+Impact Score находится в диапазоне `0-100` и является взвешенной суммой пяти нормализованных компонентов:
+
+```text
+Impact Score = 20% пользователей
+             + 20% частоты использования
+             + 20% средней оценки
+             + 20% экономии времени
+             + 20% успешности сценария
+```
+
+Нормализация MVP: 20 пользователей, 50 использований и 40 сэкономленных часов дают максимум соответствующего компонента; оценка переводится из диапазона `1-5`, успешность уже хранится как доля `0-1`. Результат ограничивается диапазоном `0-100` и округляется до одного знака.
+
+Candidate Best Practice создаётся, когда одновременно выполнены правила:
+
+- Impact Score не ниже `70`;
+- не менее `8` использований и `3` разных пользователей;
+- успешность не ниже `80%`;
+- ошибка не выше `20%`;
+- средняя пользовательская оценка не ниже `4.0`.
+
+Отсутствующие rating/success signals не считаются положительными: Radar не создаёт практику только по размеру кластера. Confidence Score отражает полноту метаданных, cohesion сценария и объём наблюдений. Экономия FTE для месячного периода считается как `сэкономленные часы / 160`.
+
+Для расчёта используются canonical `user_id`, `team`, `direction`, `agent_id`, `timestamp` и разрешённые ключи JSON-поля `metadata`: `department`, `model`, `rating`, `time_saved_minutes`, `success`, `error`. Остальные ключи не сохраняются в аналитических метаданных.
+
+Статусы workflow: `detected`, `under_review`, `approved`, `rejected`, `published`. Публикация разрешена только после согласования; повторные approve/publish запросы идемпотентны. Каждая практика получает текстовую рекомендацию на основе охвата подразделений и типа сценария.
+
+API модуля:
+
+- `GET /api/best-practices`
+- `GET /api/best-practices/top`
+- `GET /api/best-practices/{id}`
+- `POST /api/best-practices/{id}/approve`
+- `POST /api/best-practices/{id}/publish`
+
+Dashboard реализован на основе предоставленного макета Arvexo Radar. В «Обзоре» показаны две ведущие практики, полный каталог доступен в `AI Best Practices`, а `Knowledge Discovery` содержит новые, быстрорастущие и эффективные практики, группировки по подразделениям и моделям. Frontend читает Radar API; если локальный backend недоступен, он явно помечает встроенный набор как демонстрационные данные.
 
 ## Зафиксированный стек
 
@@ -76,6 +119,7 @@ H100 в v0.1.0 не используется. Средний размер зап
 - [Judges FAQ](./docs/20-judges-faq.md)
 - [Architecture Decisions](./docs/21-architecture-decisions.md)
 - [CI/CD](./docs/22-ci-cd.md)
+- [System Analytics](./docs/system-analytics.md)
 
 Краткие entry points: [ARCHITECTURE.md](./ARCHITECTURE.md), [SECURITY.md](./SECURITY.md), [API.md](./API.md), [DEMO.md](./DEMO.md), [ROADMAP.md](./ROADMAP.md).
 
@@ -93,6 +137,10 @@ make up
 ```
 
 `api` контейнер применяет Alembic-миграции при старте. `worker` опрашивает `analysis_jobs` (`SELECT ... FOR UPDATE SKIP LOCKED`) и выполняет весь пайплайн анализа: embeddings → classification → clustering → scenario naming (LLM) → insights/recommendations (LLM). Полный контракт запуска — в [Deployment Specification](./docs/17-deployment.md).
+
+OpenAI-compatible proxy доступен по `POST /v1/chat/completions`, а объективная
+системная аналитика — по `/api/analytics/*`. Схема телеметрии, формулы,
+тарифы и примеры запросов описаны в [System Analytics](./docs/system-analytics.md).
 
 Демонстрационный сквозной сценарий (`provider_mode=mock`, без внешних ключей):
 
