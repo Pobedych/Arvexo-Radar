@@ -110,6 +110,11 @@ jobs:
           labels: ${{ steps.web_meta.outputs.labels }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+          # NEXT_PUBLIC_* is inlined into the client bundle at build time
+          # (see frontend/Dockerfile) — docker-compose.prod.yml's .env has
+          # no effect on it. Update this if the deploy domain ever changes.
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://radar.arvexo.ru/api/v1
 
   deploy:
     name: Deploy to server
