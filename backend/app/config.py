@@ -32,11 +32,14 @@ class Settings(BaseSettings):
     bothub_api_key: SecretStr | None = None
     bothub_base_url: str = "https://openai.bothub.chat/v1"
     bothub_model: str = "gemini-2.5-flash"
-    llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    # Balanced production profile: enough context/output for meaningful AI
+    # wording while keeping every request explicitly bounded.
+    llm_timeout_seconds: float = Field(default=60.0, gt=0, le=300)
     llm_max_retries: int = Field(default=1, ge=0, le=5)
-    llm_max_output_tokens: int = Field(default=640, ge=128, le=4096)
-    llm_max_samples: int = Field(default=3, ge=1, le=5)
-    llm_max_sample_chars: int = Field(default=400, ge=100, le=2000)
+    llm_max_output_tokens: int = Field(default=1024, ge=128, le=8192)
+    llm_max_samples: int = Field(default=5, ge=1, le=10)
+    llm_max_sample_chars: int = Field(default=800, ge=100, le=4000)
+    llm_max_recommendations: int = Field(default=6, ge=1, le=20)
 
     # OpenAI-compatible proxy settings. The base URL should include the API
     # version prefix, for example https://api.openai.com/v1.

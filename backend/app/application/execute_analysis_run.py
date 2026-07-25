@@ -46,10 +46,15 @@ class ExecuteAnalysisRun:
         repository: AnalysisRepository,
         llm_provider: LLMProvider,
         best_practice_detector: BestPracticeDetectionService | None = None,
+        *,
+        max_scenario_samples: int = 3,
+        max_recommendations: int = 3,
     ) -> None:
         self._repo = repository
         self._llm = llm_provider
         self._best_practice_detector = best_practice_detector
+        self._max_scenario_samples = max_scenario_samples
+        self._max_recommendations = max_recommendations
 
     async def execute(self, run_id: uuid.UUID) -> None:
         run = await self._repo.get_run_by_id(run_id)
@@ -153,7 +158,10 @@ class ExecuteAnalysisRun:
 
             if not cluster.is_noise:
                 samples = select_representative_samples(
-                    cluster.member_ids, vectors, cluster.centroid, limit=5
+                    cluster.member_ids,
+                    vectors,
+                    cluster.centroid,
+                    limit=self._max_scenario_samples,
                 )
                 sample_ids = {s.record_id for s in samples}
                 for member in members:
@@ -272,7 +280,11 @@ class ExecuteAnalysisRun:
         await self._repo.bulk_create_insights(insight_rows)
 
         recommendation_rows: list[Recommendation] = []
-        for insight_row, draft in zip(insight_rows[:3], insight_drafts[:3], strict=False):
+        for insight_row, draft in zip(
+            insight_rows[: self._max_recommendations],
+            insight_drafts[: self._max_recommendations],
+            strict=False,
+        ):
             try:
                 result = await self._llm.generate(
                     operation=LLMOperation.RECOMMENDATION,

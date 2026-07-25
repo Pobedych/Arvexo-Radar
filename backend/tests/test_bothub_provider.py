@@ -87,7 +87,7 @@ async def test_scenario_output_is_validated_bounded_and_keeps_local_evidence() -
     assert result.usage["total_tokens"] == 128
     assert captured["model"] == "gemini-2.5-flash"
     assert captured["reasoning_effort"] == "none"
-    assert captured["max_tokens"] == 640
+    assert captured["max_tokens"] == 1024
     prompt = json.loads(captured["messages"][1]["content"])
     assert prompt["return_schema"]["required"] == ["name"]
     assert set(prompt["return_schema"]["properties"]) == {"name"}
@@ -167,7 +167,7 @@ async def test_length_truncation_doubles_budget_without_longer_retry_prompt() ->
             idempotency_key="run:scenario:length",
         )
 
-    assert [payload["max_tokens"] for payload in payloads] == [640, 1280]
+    assert [payload["max_tokens"] for payload in payloads] == [1024, 2048]
     assert [len(payload["messages"]) for payload in payloads] == [2, 2]
     assert result.data["name"] == "Сводки"
 

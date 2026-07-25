@@ -33,7 +33,13 @@ async def run_once(session: AsyncSession, *, worker_id: str) -> bool:
     settings = get_settings()
     llm_provider = build_llm_provider(settings)
     best_practice_detector = BestPracticeDetectionService(BestPracticeRepository(session))
-    executor = ExecuteAnalysisRun(repo, llm_provider, best_practice_detector)
+    executor = ExecuteAnalysisRun(
+        repo,
+        llm_provider,
+        best_practice_detector,
+        max_scenario_samples=settings.llm_max_samples,
+        max_recommendations=settings.llm_max_recommendations,
+    )
 
     try:
         await executor.execute(job.run_id)
