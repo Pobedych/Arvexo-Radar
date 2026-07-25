@@ -58,7 +58,7 @@ export interface RunOverview {
   insights: InsightSummary[];
   recommendations: RecommendationSummary[];
   trend: { available: boolean; reason: string | null };
-  degradations: { code: string; affected: string[] }[];
+  degradations: { code: string; affected: string[]; details?: Record<string, unknown> }[];
   limitations: string[];
 }
 

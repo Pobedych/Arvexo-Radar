@@ -25,7 +25,7 @@ export interface RunSummary {
   dataset_id: string;
   status: string;
   stage: string | null;
-  degradations: { code: string; affected: string[] }[];
+  degradations: { code: string; affected: string[]; details?: Record<string, unknown> }[];
   provenance: Record<string, unknown>;
 }
 

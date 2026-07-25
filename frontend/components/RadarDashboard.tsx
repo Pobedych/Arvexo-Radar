@@ -386,8 +386,38 @@ function DataUnavailable({ title, reason, onRequestUpload }: { title: string; re
   );
 }
 
-function formatPercent(value: number) {
-  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value * 100 <= 1 ? value * 100 : value)}%`;
+function formatPercent(share: number) {
+  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(share * 100)}%`;
+}
+
+const LLM_DEGRADATION_LABELS: Record<string, string> = {
+  LLM_PROVIDER_UNAVAILABLE: "LLM-провайдер недоступен",
+  LLM_TIMEOUT: "BotHub не ответил вовремя",
+  LLM_TRANSPORT_ERROR: "ошибка соединения с BotHub",
+  LLM_HTTP_ERROR: "BotHub вернул HTTP-ошибку",
+  LLM_INVALID_RESPONSE: "BotHub вернул неполный ответ",
+  LLM_INVALID_JSON: "модель вернула невалидный JSON",
+  LLM_SCHEMA_VALIDATION_FAILED: "JSON модели не соответствует ожидаемой схеме",
+  LLM_INVALID_EVIDENCE: "для генерации не хватило подтверждающих данных",
+};
+
+function formatDegradations(degradations: RunOverview["degradations"]) {
+  return [...new Set(degradations.map(({ code, details }) => {
+    const label = LLM_DEGRADATION_LABELS[code] ?? code;
+    const statusCode = details?.status_code;
+    if (typeof statusCode === "number") return `${label} (HTTP ${statusCode})`;
+    const issues = details?.issues;
+    if (Array.isArray(issues)) {
+      const fields = [...new Set(issues
+        .map((issue) => typeof issue === "object" && issue !== null && "loc" in issue
+          ? String(issue.loc)
+          : "")
+        .filter(Boolean))];
+      if (fields.length > 0) return `${label} (поля: ${fields.join(", ")})`;
+    }
+    return label;
+  }))]
+    .join(", ");
 }
 
 function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverview; onRequestUpload: () => void }) {
@@ -407,7 +437,7 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
       {overview.degradations.length > 0 && (
         <div className="demo-banner" role="status">
           <WarningCircle size={18} weight="fill" />
-          Часть стадий анализа деградировала: {overview.degradations.map((degradation) => degradation.code).join(", ")}
+          Часть стадий анализа деградировала: {formatDegradations(overview.degradations)}
         </div>
       )}
 
