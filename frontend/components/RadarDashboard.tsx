@@ -32,7 +32,13 @@ import {
   fetchPracticeTop,
   recommendPractice,
 } from "../lib/best-practices";
-import { createRun, pollRunUntilDone, RunSummary, uploadDataset } from "../lib/datasets";
+import {
+  createRun,
+  hasAnalysisResults,
+  pollRunUntilDone,
+  RunSummary,
+  uploadDataset,
+} from "../lib/datasets";
 import {
   EnterpriseFilters,
   fetchAgents,
@@ -184,6 +190,7 @@ function ReportsView({
 }) {
   const [stage, setStage] = useState<ReportStage>("idle");
   const [error, setError] = useState<string | null>(null);
+  const reportAvailable = Boolean(run && hasAnalysisResults(run.status));
   const staticRows: [string, string][] = [
     ["Сводный анализ за июль", "25 июл. 2026"],
     ["Эффективность подразделений", "24 июл. 2026"],
@@ -224,11 +231,17 @@ function ReportsView({
           {run ? (
             <div className="data-row">
               <strong>PDF-отчёт по текущему прогону анализа</strong>
-              <span>{run.status === "completed" ? "Готов к формированию" : `Статус прогона: ${run.status}`}</span>
+              <span>
+                {reportAvailable
+                  ? run.status === "degraded"
+                    ? "Готов с ограничениями — часть LLM-блоков недоступна"
+                    : "Готов к формированию"
+                  : `Статус прогона: ${run.status}`}
+              </span>
               <button
                 type="button"
                 className="secondary-button"
-                disabled={run.status !== "completed" || stage === "generating" || stage === "downloading"}
+                disabled={!reportAvailable || stage === "generating" || stage === "downloading"}
                 onClick={generateAndDownload}
               >
                 {stage === "generating" || stage === "downloading" ? (
@@ -281,7 +294,7 @@ function DatasetUploadModal({
     idle: "Выберите CSV-файл с запросами пользователей к ИИ-агенту.",
     uploading: "Загружаем и валидируем датасет...",
     validating: "Проверяем структуру и данные...",
-    analyzing: "Запускаем классификацию и кластеризацию...",
+    analyzing: "Запускаем классификацию и кластеризацию... это может занять несколько минут.",
     error: "Не удалось обработать датасет.",
   };
 
@@ -294,7 +307,7 @@ function DatasetUploadModal({
       setStage("analyzing");
       const run = await createRun(dataset.id);
       const finished = await pollRunUntilDone(run.run_id);
-      if (finished.status !== "completed") {
+      if (!hasAnalysisResults(finished.status)) {
         throw new Error(`Анализ завершился со статусом «${finished.status}».`);
       }
       onCompleted(finished);
@@ -498,7 +511,7 @@ export function RadarDashboard() {
   const runOverviewQuery = useQuery({
     queryKey: ["run-overview", currentRun?.run_id],
     queryFn: () => fetchRunOverview(currentRun!.run_id),
-    enabled: Boolean(currentRun && currentRun.status === "completed"),
+    enabled: Boolean(currentRun && hasAnalysisResults(currentRun.status)),
   });
   const practiceMutation = useMutation({ mutationFn: recommendPractice });
 
@@ -564,7 +577,11 @@ export function RadarDashboard() {
         onCompleted={(run) => {
           setCurrentRun(run);
           setUploadOpen(false);
-          setToast("Датасет загружен и проанализирован — можно сформировать отчёт");
+          setToast(
+            run.status === "degraded"
+              ? "Анализ завершён с ограничениями — локальные результаты и PDF доступны"
+              : "Датасет загружен и проанализирован — можно сформировать отчёт",
+          );
           window.setTimeout(() => setToast(null), 3200);
           navigate("reports");
         }}
