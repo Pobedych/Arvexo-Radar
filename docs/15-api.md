@@ -66,6 +66,18 @@
 - `GET /reports/{report_id}` — status/metadata.
 - `GET /reports/{report_id}/download` — authorized PDF stream.
 
+### AI Best Practices
+
+- `GET /api/best-practices` — каталог с фильтрами status/department/model/min impact и пагинацией.
+- `GET /api/best-practices/top` — новые, быстрорастущие, эффективные и группировки для Knowledge Discovery; rejected исключаются по умолчанию.
+- `GET /api/best-practices/{id}` — карточка практики и evidence агрегаты.
+- `POST /api/best-practices/{id}/approve` — согласование detected/under_review практики.
+- `POST /api/best-practices/{id}/publish` — публикация только approved практики.
+
+Эти пять endpoints намеренно расположены под `/api`, как контракт модуля Knowledge Discovery; основной analysis API сохраняет base path `/api/v1`.
+
+Best Practice response дополнительно возвращает recommendation, explainable aggregate signals, departments/models и detection evidence. `estimated_time_saved` измеряется в часах за observation period. Mutation endpoints идемпотентны для уже достигнутого состояния и возвращают `409 BEST_PRACTICE_INVALID_STATE` для запрещённого перехода.
+
 ## 4. Example: create run
 
 ```http
@@ -144,10 +156,13 @@ Breaking contract change создаёт `/api/v2` или согласованн�
 - **API-AC-04:** errors не раскрывают sensitive data.
 - **API-AC-05:** partial/degraded отличается от empty/success.
 - **API-AC-06:** PDF доступен только для authorized principal.
+- **API-AC-07:** Best Practice list/detail/actions tenant-scoped.
+- **API-AC-08:** TOP не содержит rejected practices.
+- **API-AC-09:** publish до approve возвращает `409`.
 
 ## 11. Связанные документы
 
 - [Backend](./12-backend.md)
 - [Frontend](./13-frontend.md)
 - [Security](./16-security.md)
-
+- [AI Best Practices](./23-best-practices.md)

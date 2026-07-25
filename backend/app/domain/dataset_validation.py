@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -36,6 +37,14 @@ CANONICAL_FIELDS = {
 }
 REQUIRED_FIELD = "text"
 ALLOWED_DELIMITERS = (",", ";", "\t")
+ALLOWED_METADATA_FIELDS = {
+    "department",
+    "model",
+    "rating",
+    "time_saved_minutes",
+    "success",
+    "error",
+}
 
 
 @dataclass(frozen=True)
@@ -49,7 +58,7 @@ class RowResult:
     rejection_code: str | None
     timestamp: datetime | None
     trend_eligible: bool
-    metadata: dict[str, str]
+    metadata: dict[str, object]
 
 
 @dataclass
@@ -244,12 +253,26 @@ def _validate_row(
             else:
                 trend_eligible = True
 
-    metadata: dict[str, str] = {}
+    metadata: dict[str, object] = {}
     for field_name in ("user_id", "team", "direction", "agent_id", "language"):
         if field_name in schema_mapping:
             value = raw_row.get(schema_mapping[field_name])
             if value and value.strip():
                 metadata[field_name] = value.strip()
+
+    if "metadata" in schema_mapping:
+        raw_metadata = raw_row.get(schema_mapping["metadata"])
+        if raw_metadata and raw_metadata.strip():
+            try:
+                parsed_metadata = json.loads(raw_metadata)
+                if not isinstance(parsed_metadata, dict):
+                    raise TypeError("metadata must be an object")
+                for key in ALLOWED_METADATA_FIELDS:
+                    value = parsed_metadata.get(key)
+                    if isinstance(value, (str, int, float, bool)):
+                        metadata[key] = value
+            except (json.JSONDecodeError, TypeError):
+                warnings.append("invalid_metadata")
 
     status = RecordStatus.ACCEPTED_WITH_WARNINGS if warnings else RecordStatus.ACCEPTED
     token_count = len(normalized.split())

@@ -16,6 +16,8 @@ from app.config import get_settings
 from app.domain.enums import RunStatus
 from app.infrastructure.providers.factory import build_llm_provider
 from app.repositories.analysis_repository import AnalysisRepository
+from app.repositories.best_practice_repository import BestPracticeRepository
+from app.services.best_practice_detection import BestPracticeDetectionService
 
 logger = logging.getLogger("arvexo.worker")
 
@@ -30,7 +32,8 @@ async def run_once(session: AsyncSession, *, worker_id: str) -> bool:
 
     settings = get_settings()
     llm_provider = build_llm_provider(settings)
-    executor = ExecuteAnalysisRun(repo, llm_provider)
+    best_practice_detector = BestPracticeDetectionService(BestPracticeRepository(session))
+    executor = ExecuteAnalysisRun(repo, llm_provider, best_practice_detector)
 
     try:
         await executor.execute(job.run_id)

@@ -73,3 +73,13 @@ class ReportNotFoundError(ArvexoError):
 class ReportNotReadyError(ArvexoError):
     code = "REPORT_NOT_READY"
     status = 409
+
+
+class BestPracticeNotFoundError(ArvexoError):
+    code = "BEST_PRACTICE_NOT_FOUND"
+    status = 404
+
+
+class BestPracticeStateError(ArvexoError):
+    code = "BEST_PRACTICE_INVALID_STATE"
+    status = 409

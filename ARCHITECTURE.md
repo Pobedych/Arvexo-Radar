@@ -11,6 +11,10 @@ Arvexo Radar использует modular monolith с отдельными proce
 - immutable analysis runs и полное model/config/evidence provenance;
 - обязательный chunking для среднего запроса 100k токенов;
 - H100 не используется.
+- content-free LLM gateway telemetry является фактическим системным источником;
+- pure Decimal calculation domain отделён от demo/DB adapters;
+- TCO/Benchmark/Methodology и Adoption — отдельные persistence entities;
+- full enterprise dashboard в demo-mode использует явно помеченный coherent synthetic adapter.
 
 Полная спецификация, diagrams, trust boundaries и reliability model: [docs/09-architecture.md](./docs/09-architecture.md).
 
@@ -20,4 +24,4 @@ Arvexo Radar использует modular monolith с отдельными proce
 - [Backend](./docs/12-backend.md)
 - [Database](./docs/14-database.md)
 - [Architecture Decisions](./docs/21-architecture-decisions.md)
-
+- [Enterprise Effectiveness](./docs/24-enterprise-effectiveness.md)

@@ -7,7 +7,7 @@ section 9. Concrete adapters live under app/infrastructure/providers/.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol
 
@@ -31,6 +31,7 @@ class LLMResult:
     data: dict[str, Any]
     provenance: LLMProvenance
     degraded: bool = False
+    usage: dict[str, int] = field(default_factory=dict)
 
 
 class LLMProviderError(Exception):

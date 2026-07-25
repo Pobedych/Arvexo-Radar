@@ -80,6 +80,8 @@ sequenceDiagram
     Worker->>Worker: embeddings, classification, clustering
     Worker->>Provider: masked structured evidence batch
     Provider-->>Worker: validated JSON or error
+    Worker->>Worker: aggregate Best Practice signals
+    Worker->>DB: detected candidates + evidence
     Worker->>DB: results + evidence + provenance
     Web->>API: poll run/results
     API-->>Web: overview and drill-down
@@ -92,6 +94,7 @@ sequenceDiagram
 3. **Raw → masked data:** после boundary downstream-компоненты используют masked text.
 4. **Worker → external LLM:** только минимизированный evidence package.
 5. **API → report:** output escaping и единый persisted result set.
+6. **Scenario → Best Practice:** только агрегированные allowlisted metadata; classifier не получает raw text.
 
 ## 7. Analysis state model
 
@@ -147,4 +150,3 @@ sequenceDiagram
 - [Database](./14-database.md)
 - [Security](./16-security.md)
 - [Architecture Decisions](./21-architecture-decisions.md)
-

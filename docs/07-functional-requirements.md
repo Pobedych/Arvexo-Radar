@@ -147,7 +147,43 @@ Embedding cache keyed by sanitized content hash, model version и chunking versi
 
 Система показывает usage/proxy signals по направлениям и командам при наличии полей. Реальная экономия и ROI не заявляются без outcome metrics.
 
-## 10. Prompt Health
+## 10. AI Best Practices и Knowledge Discovery
+
+### FR-BP-01 - Candidate Best Practice (P0)
+
+После формирования Scenario система агрегирует разрешённые usage/outcome metadata и создаёт `BestPractice(status=detected)` только при прохождении versioned classifier. Повторный анализ одного scenario в tenant не создаёт дубликат.
+
+### FR-BP-02 - Impact Score (P0)
+
+Impact Score находится в диапазоне `0-100` и включает количество пользователей, частоту использования, пользовательскую оценку, экономию времени и успешность. Формула, weights, caps и версия classifier сохраняются и документируются.
+
+### FR-BP-03 - Conservative detection (P0)
+
+MVP требует одновременно высокий Impact Score, достаточное использование и число пользователей, высокую успешность, низкий error rate и положительную оценку. Отсутствующий outcome signal не считается положительным.
+
+### FR-BP-04 - Recommendation (P0)
+
+Каждая практика получает recommendation по распространению. Recommendation является предложением, не выполняет действие автоматически и содержит понятное основание.
+
+### FR-BP-05 - Review workflow (P0)
+
+Допустимые статусы: `detected`, `under_review`, `approved`, `rejected`, `published`. Publish разрешён только после approve. Совмещённый approve+publish допускается только в явно обозначенном demo-mode.
+
+### FR-BP-06 - Comparable periods (P1)
+
+Growth и FTE рассчитываются только для определённого observation period. Growth сравнивает окна одинаковой длительности; FTE нормализует экономию к месяцу или возвращает unavailable.
+
+### FR-KD-01 - Knowledge Discovery (P0)
+
+Dashboard показывает новые, быстрорастущие и наиболее эффективные практики, а также группировки по подразделениям и моделям. Отклонённые практики не входят в TOP.
+
+### FR-KD-02 - Honest UI state (P0)
+
+Demo fixtures разрешены только в demo environment. В api/production environment ошибка API отображается как error state и не маскируется демонстрационными практиками.
+
+Полный контракт определён в [AI Best Practices и Knowledge Discovery](./23-best-practices.md).
+
+## 11. Prompt Health
 
 ### FR-PH-01 — Checks (P0)
 
@@ -157,7 +193,7 @@ Embedding cache keyed by sanitized content hash, model version и chunking versi
 
 Пороговые значения и версии правил сохраняются. Finding содержит rule id, severity, explanation и masked evidence.
 
-## 11. Dashboard и Explainability
+## 12. Dashboard и Explainability
 
 ### FR-DSH-01 — Executive Overview (P0)
 
@@ -175,7 +211,7 @@ Loading, empty, partial, degraded, failed и completed отображаются 
 
 Для результата доступны source run, модель/алгоритм, версия конфигурации, время расчёта, confidence/quality и evidence references.
 
-## 12. Report Generation
+## 13. Report Generation
 
 ### FR-RPT-01 — PDF report (P0)
 
@@ -185,7 +221,7 @@ Loading, empty, partial, degraded, failed и completed отображаются 
 
 Значения PDF совпадают с dashboard для того же run. Генерация не запускает анализ повторно.
 
-## 13. Orchestration и операции
+## 14. Orchestration и операции
 
 ### FR-RUN-01 — Analysis run (P0)
 
@@ -207,7 +243,7 @@ Upload, run creation, polling и report endpoints имеют конфигури�
 
 Все dataset/run/report ресурсы связаны с tenant/owner context. В demo mode используется явный локальный principal; production authentication подключается без изменения domain logic.
 
-## 14. Edge cases
+## 15. Edge cases
 
 - пустой файл, отсутствующий `text`, битая кодировка;
 - одна валидная строка или все строки — дубликаты;
@@ -219,10 +255,15 @@ Upload, run creation, polling и report endpoints имеют конфигури�
 - повторная загрузка идентичного файла;
 - sensitive value находится в representative sample;
 - PDF запрошен для незавершённого run.
+- Best Practice не имеет rating/success metadata;
+- detector повторно обрабатывает тот же source scenario;
+- timestamp не позволяет построить два сопоставимых окна;
+- rejected practice попадает в TOP;
+- publish запрошен до approve;
+- production API недоступен, а frontend работает не в demo-mode.
 
 Во всех случаях система возвращает явный статус и не создаёт правдоподобный фиктивный результат.
 
-## 15. Traceability
+## 16. Traceability
 
-Требования реализуются только после детализации в [Dataset](./08-dataset.md), [Architecture](./09-architecture.md), [AI Pipeline](./10-ai-pipeline.md), [Backend](./12-backend.md), [Frontend](./13-frontend.md), [API](./15-api.md) и [Security](./16-security.md).
-
+Требования реализуются только после детализации в [Dataset](./08-dataset.md), [Architecture](./09-architecture.md), [AI Pipeline](./10-ai-pipeline.md), [Backend](./12-backend.md), [Frontend](./13-frontend.md), [API](./15-api.md), [Security](./16-security.md) и [AI Best Practices](./23-best-practices.md).

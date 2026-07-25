@@ -57,3 +57,22 @@ class RunStatus(str, Enum):
     DEGRADED = "degraded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class BestPracticeStatus(str, Enum):
+    DETECTED = "detected"
+    UNDER_REVIEW = "under_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    PUBLISHED = "published"
+    SCALING = "scaling"
+    ARCHIVED = "archived"
+
+
+class PracticeAdoptionStatus(str, Enum):
+    RECOMMENDED = "recommended"
+    ACCEPTED = "accepted"
+    PILOT = "pilot"
+    ADOPTED = "adopted"
+    REJECTED = "rejected"
+    PAUSED = "paused"

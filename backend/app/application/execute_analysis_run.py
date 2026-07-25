@@ -34,15 +34,22 @@ from app.infrastructure.db.models import (
     ScenarioMember,
 )
 from app.repositories.analysis_repository import AnalysisRepository
-from app.services.llm_provider import LLMOperation, LLMProvider, LLMProviderError
+from app.services.best_practice_detection import BestPracticeDetectionService
+from app.services.llm_provider import LLMOperation, LLMProvider, LLMProviderError, LLMResult
 
 CLASSIFICATION_METHOD_VERSION = "keyword-fallback-v1"
 
 
 class ExecuteAnalysisRun:
-    def __init__(self, repository: AnalysisRepository, llm_provider: LLMProvider) -> None:
+    def __init__(
+        self,
+        repository: AnalysisRepository,
+        llm_provider: LLMProvider,
+        best_practice_detector: BestPracticeDetectionService | None = None,
+    ) -> None:
         self._repo = repository
         self._llm = llm_provider
+        self._best_practice_detector = best_practice_detector
 
     async def execute(self, run_id: uuid.UUID) -> None:
         run = await self._repo.get_run_by_id(run_id)
@@ -53,6 +60,17 @@ class ExecuteAnalysisRun:
         run.started_at = datetime.now(UTC)
         await self._repo.commit()
         degradations: list[dict] = []
+        llm_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+        def record_llm_result(result: LLMResult) -> None:
+            for key in llm_usage:
+                llm_usage[key] += result.usage.get(key, 0)
+            run.model_provenance = {
+                "provider": result.provenance.provider,
+                "model": result.provenance.model,
+                "prompt_version": result.provenance.prompt_version,
+                "usage": dict(llm_usage),
+            }
 
         records = await self._repo.get_analyzable_records(run.dataset_version_id)
         records = [r for r in records if r.masked_text]
@@ -174,11 +192,7 @@ class ExecuteAnalysisRun:
                 scenario.typical_phrasings = result.data.get("typical_phrasings", [])
                 scenario.caveats = result.data.get("caveats", [])
                 scenario.generation_status = "generated"
-                run.model_provenance = {
-                    "provider": result.provenance.provider,
-                    "model": result.provenance.model,
-                    "prompt_version": result.provenance.prompt_version,
-                }
+                record_llm_result(result)
             except LLMProviderError:
                 scenario.name = f"Кластер {scenario.cluster_label}"
                 scenario.description = None
@@ -186,6 +200,14 @@ class ExecuteAnalysisRun:
                 degradations.append(
                     {"code": "LLM_PROVIDER_UNAVAILABLE", "affected": [f"scenario:{scenario.id}"]}
                 )
+
+        if self._best_practice_detector is not None:
+            await self._best_practice_detector.detect_for_run(
+                run=run,
+                scenarios=scenario_rows,
+                members_by_scenario=scenario_members_by_scenario,
+                records=records,
+            )
 
         # -- insights (local rules) --------------------------------------------
         run.stage = RunStage.INSIGHTS
@@ -251,10 +273,18 @@ class ExecuteAnalysisRun:
                 result = await self._llm.generate(
                     operation=LLMOperation.RECOMMENDATION,
                     schema_version="v1",
-                    evidence={"linked_insight_ids": [str(insight_row.id)]},
+                    evidence={
+                        "type": draft.type,
+                        "statement": draft.statement,
+                        "evidence_refs": draft.evidence_refs,
+                        "confidence": draft.confidence,
+                        "limitations": draft.limitations,
+                        "linked_insight_ids": [str(insight_row.id)],
+                    },
                     locale=run.config_snapshot.get("locale", "ru-RU"),
                     idempotency_key=f"{run.id}:recommendation:{insight_row.id}",
                 )
+                record_llm_result(result)
                 recommendation_rows.append(
                     Recommendation(
                         id=uuid.uuid4(),

@@ -1,6 +1,6 @@
 # Arvexo Radar: AI/ML pipeline
 
-**Версия:** v0.1.0 — Hackathon MVP
+**Версия:** v0.2.0 — Hackathon MVP
 **Статус:** спецификация AI/ML
 
 ## 1. Принципы
@@ -26,6 +26,7 @@
 | Selection | clusters | representative evidence | Local deterministic |
 | Naming/Summary | minimal evidence | structured scenario text | LLM provider |
 | Insights | aggregates/evidence | typed insights | Local rules + bounded LLM wording |
+| Best Practice Detection | scenario aggregates | candidate practices + score evidence | Local deterministic rules |
 | Recommendations | insights | structured actions | LLM provider with evidence |
 
 ## 3. Preprocessing и chunking
@@ -95,11 +96,24 @@ generate(operation, schema_version, evidence, locale, idempotency_key)
 
 Реализации:
 
-- `BothubGeminiProvider` — основной API mode;
+- `BothubProvider` — основной API mode через OpenAI-compatible BotHub Chat Completions;
 - `MockProvider` — детерминированные fixtures без сети;
 - `LocalProvider` — optional adapter для локального тестового endpoint/runtime; конкретный runtime не фиксируется.
 
 Все provider responses проходят JSON schema/Pydantic validation. Chain-of-thought не запрашивается и не сохраняется.
+
+Для включения API mode задаются `ARVEXO_LLM_PROVIDER_MODE=bothub`,
+`ARVEXO_BOTHUB_API_KEY`, `ARVEXO_BOTHUB_BASE_URL` (по умолчанию
+`https://openai.bothub.chat/v1`) и `ARVEXO_BOTHUB_MODEL` (по умолчанию
+`gemini-2.5-flash`). Ключ хранится как `SecretStr`, не попадает в snapshot,
+provider error или логи.
+
+Token budget ограничен до отправки: максимум 3 representative samples по 400
+символов и 320 output tokens на запрос (все лимиты настраиваются через
+`ARVEXO_LLM_MAX_*`). В prompt передаётся компактный output template вместо
+полной JSON Schema; строгая Pydantic-валидация выполняется локально. Фактические
+`prompt_tokens`, `completion_tokens` и `total_tokens` суммируются в
+`run.model_provenance.usage`.
 
 ## 10. Prompt и output schemas
 
@@ -143,7 +157,19 @@ Insight output содержит `type`, `statement`, `evidence_refs`, `confidenc
 
 Local calculations определяют counts, shares, trends, repeated patterns и findings. LLM может формулировать readable statement, но evidence list создаётся до вызова. «Эффективность» без outcomes показывается как usage/proxy signal: распространённость, повторяемость, рост, prompt friction или automation potential. ROI не генерируется.
 
-## 14. Evaluation
+## 14. Best Practice Detection
+
+MVP-классификатор работает локально и детерминированно после агрегации сценариев. Он рассчитывает `impact_score`, проверяет минимальные пороги использования, числа пользователей, успешности, ошибок и оценки, а затем создаёт практику в статусе `detected`. Для каждого решения сохраняются версия правил и использованные метрики.
+
+- Рост рассчитывается по двум сопоставимым временным окнам, а не по разбиению событий пополам.
+- `estimated_time_saved` хранится в часах; `estimated_fte_saved` нормализуется на явно заданный период наблюдения.
+- Отсутствующие или недостоверные сигналы не подменяются нулевыми значениями без caveat.
+- Публикация остаётся отдельным управляемым действием после проверки человеком.
+- Контракт классификатора остаётся заменяемым, чтобы позднее подключить AI-модель без изменения API и жизненного цикла практики.
+
+Подробные формулы, пороги, статусы и критерии приёмки описаны в [AI Best Practices](./23-best-practices.md).
+
+## 15. Evaluation
 
 - Classification: экспертная размеченная sample, per-label precision/recall/F1 после её появления.
 - Clustering: expert pair/group review плюс подходящие internal metrics.
@@ -154,7 +180,7 @@ Local calculations определяют counts, shares, trends, repeated pattern
 
 До baseline документация не задаёт фиктивные thresholds. Demo dataset не используется как единственное доказательство качества.
 
-## 15. Критерии приёмки
+## 16. Критерии приёмки
 
 - **AI-AC-01:** полный raw prompt не отправляется внешней LLM.
 - **AI-AC-02:** output не принимается без schema validation.
@@ -162,11 +188,13 @@ Local calculations определяют counts, shares, trends, repeated pattern
 - **AI-AC-04:** low confidence не скрывается.
 - **AI-AC-05:** provider outage сохраняет local results.
 - **AI-AC-06:** 100k-token record не обрезается молча.
+- **AI-AC-07:** решение о создании Best Practice воспроизводимо из сохранённых метрик и версии правил.
+- **AI-AC-08:** growth и FTE не рассчитываются без определённых временных периодов.
 
-## 16. Связанные документы
+## 17. Связанные документы
 
 - [Dataset](./08-dataset.md)
 - [Architecture](./09-architecture.md)
 - [Security](./16-security.md)
 - [Architecture Decisions](./21-architecture-decisions.md)
-
+- [AI Best Practices](./23-best-practices.md)

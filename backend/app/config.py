@@ -1,6 +1,7 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,13 +25,28 @@ class Settings(BaseSettings):
     max_row_chars: int = 400_000
 
     llm_provider_mode: Literal["mock", "bothub", "local"] = "mock"
-    bothub_api_key: str | None = None
-    bothub_base_url: str | None = None
-    bothub_model: str = "gemini-flash"
-    llm_timeout_seconds: float = 30.0
-    llm_max_retries: int = 2
+    bothub_api_key: SecretStr | None = None
+    bothub_base_url: str = "https://openai.bothub.chat/v1"
+    bothub_model: str = "gemini-2.5-flash"
+    llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    llm_max_retries: int = Field(default=1, ge=0, le=5)
+    llm_max_output_tokens: int = Field(default=320, ge=128, le=2000)
+    llm_max_samples: int = Field(default=3, ge=1, le=5)
+    llm_max_sample_chars: int = Field(default=400, ge=100, le=2000)
+
+    # OpenAI-compatible proxy settings. The base URL should include the API
+    # version prefix, for example https://api.openai.com/v1.
+    llm_proxy_base_url: str | None = None
+    llm_proxy_api_key: str | None = None
+    llm_proxy_timeout_seconds: float = 60.0
+    analytics_user_hash_salt: str = "demo-only-change-this-analytics-salt"
+    analytics_currency: str = Field(
+        default="RUB", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$"
+    )
 
     rate_limit_per_minute: int = 60
+
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     log_level: str = "INFO"
 
@@ -39,6 +55,21 @@ class Settings(BaseSettings):
     # images (see backend/Dockerfile). Override for other environments.
     report_font_regular_path: str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     report_font_bold_path: str = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+    @model_validator(mode="after")
+    def validate_runtime_settings(self) -> Self:
+        if self.llm_provider_mode == "bothub" and (
+            self.bothub_api_key is None or not self.bothub_api_key.get_secret_value().strip()
+        ):
+            raise ValueError(
+                "ARVEXO_BOTHUB_API_KEY must be set when ARVEXO_LLM_PROVIDER_MODE=bothub"
+            )
+        if self.environment == "production" and (
+            len(self.analytics_user_hash_salt) < 16
+            or self.analytics_user_hash_salt == "demo-only-change-this-analytics-salt"
+        ):
+            raise ValueError("ARVEXO_ANALYTICS_USER_HASH_SALT must be set in production")
+        return self
 
 
 @lru_cache

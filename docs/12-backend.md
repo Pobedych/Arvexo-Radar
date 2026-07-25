@@ -41,9 +41,13 @@ backend/
 - `ExecuteAnalysisStage`
 - `GetExecutiveOverview`
 - `GetCategory/ScenarioDetail`
+- `BestPracticeDetectionService`
+- `List/Get/Approve/PublishBestPractice`
 - `GenerateReport`
 
 Каждый use case проверяет authorization context, transaction boundary и idempotency.
+
+`BestPracticeDetectionService` получает агрегированные `PracticeSignals` и обращается к port `BestPracticeClassifier`. Текущий adapter `RuleBasedBestPracticeClassifier` не должен протекать в API/router contract; AI classifier подключается через тот же port.
 
 ## 4. File handling
 
@@ -81,6 +85,7 @@ Pydantic Settings загружает environment values: DB URL, storage path, f
 - provider contract: mock/API/local adapters на одинаковых schemas;
 - e2e backend: upload → run → results → report metadata;
 - security regression: CSV Injection, secrets in logs/output, IDOR boundaries.
+- best practices: score boundaries, missing outcome signals, duplicate scenario detection, tenant filters, status transitions, TOP exclusion rules и comparable-period growth.
 
 Нельзя заявлять результаты тестов до их фактического запуска.
 
@@ -92,6 +97,8 @@ Pydantic Settings загружает environment values: DB URL, storage path, f
 - provider swap не меняет application service;
 - migrations создают schema с нуля и обновляют предыдущую version;
 - mock mode работает без external credentials.
+- Best Practice classifier заменяется без изменения DB/API contract;
+- production API error не преобразуется во frontend success/demo state.
 
 ## 12. Связанные документы
 
@@ -99,4 +106,4 @@ Pydantic Settings загружает environment values: DB URL, storage path, f
 - [Database](./14-database.md)
 - [API](./15-api.md)
 - [Security](./16-security.md)
-
+- [AI Best Practices](./23-best-practices.md)

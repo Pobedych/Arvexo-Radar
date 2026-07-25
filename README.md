@@ -1,20 +1,80 @@
 # Arvexo Radar
 
-> Turn AI Conversations into Business Decisions.
+> **Измеряем то, что работает. Масштабируем то, что работает.**
 
-Arvexo Radar — Enterprise AI Analytics Platform для анализа журналов запросов к корпоративным AI-агентам. Платформа классифицирует запросы, обнаруживает устойчивые use cases, объясняет результаты, выявляет prompt-health/security signals и формирует evidence-backed рекомендации для CTO и AI Platform Owner.
+Radar — Enterprise AI Effectiveness & Knowledge Platform. Он отвечает IT-директору на три вопроса: как сотрудники и подразделения используют AI, окупается ли корпоративная AI-инфраструктура и какие успешные практики нужно масштабировать.
 
-**Текущая версия:** v0.1.0 — Hackathon MVP
-**Статус:** backend MVP и интерактивный Dashboard реализованы
+«Radar не только показывает, как компания использует AI. Он измеряет экономический эффект и превращает локальный опыт сотрудников в масштабируемые корпоративные практики».
+
+**Текущая версия:** v0.3.0 — Enterprise Effectiveness MVP
+**Статус:** системная телеметрия, TCO/ROI, Knowledge Discovery, adoption workflow и интерактивный Dashboard реализованы
 **Целевой домен:** `radar.arvexo.ru`
 **Исходный кейс:** КРОК
 
-## Ключевые вопросы
+## Три ценности Radar
 
-1. Что происходит с использованием AI внутри организации?
-2. Что руководству следует сделать дальше?
+- **Visibility** — пользователи, роли, подразделения, запросы, модели, агенты, инструменты, токены, стоимость, ошибки и стабильность.
+- **Business Value** — полная стоимость AI, экономия времени, FTE-эквивалент, денежная экономия, Net Benefit, ROI и окупаемость сценариев.
+- **Knowledge Sharing** — обнаружение, экспертная проверка, публикация, рекомендация и отслеживание внедрения лучших практик.
 
-Radar показывает подтверждённые логами usage/proxy signals. Он не заявляет доказанный ROI без outcome-данных и не предназначен для оценки отдельных сотрудников.
+Radar показывает подтверждённые логами usage/proxy signals. Он **не утверждает причинно-следственную экономию без бизнес-бенчмарка**, не предназначен для оценки отдельных сотрудников и не раскрывает содержимое промптов в Best Practice.
+
+## Потоки данных
+
+```mermaid
+flowchart LR
+  G["AI Gateway / агенты"] --> T["Content-free telemetry"]
+  H["HR-справочник"] --> D["Роли и подразделения"]
+  F["FinOps / договоры"] --> C["Cost Components"]
+  B["A/B, нормативы, опросы"] --> S["Scenario Benchmarks"]
+  T --> E["Analytics & calculation services"]
+  D --> E
+  C --> E
+  S --> E
+  E --> V["Visibility"]
+  E --> R["TCO / ROI"]
+  E --> K["Best Practice detection"]
+  K --> A["Review → publish → adoption"]
+  V --> UI["Executive Dashboard"]
+  R --> UI
+  A --> UI
+```
+
+Техническая успешность (`success_rate`, ошибки, latency) не называется качеством бизнес-результата. В production `user_id` хешируется с server-side salt; тексты запросов и ответов в телеметрии не сохраняются.
+
+## Метрики и формулы
+
+Системные метрики: total/successful/failed requests, success/error rate, avg/median/p95 latency, TTFT, prompt/completion/total tokens, average tokens/request, token cost, DAU/WAU/MAU, unique users и разрезы по моделям, агентам, инструментам, ролям и подразделениям.
+
+```text
+input_cost  = prompt_tokens / 1_000_000 × input_price_per_1m_tokens
+output_cost = completion_tokens / 1_000_000 × output_price_per_1m_tokens
+request_cost = input_cost + output_cost
+
+A = Σ выбранных Cost Component
+time_saved_minutes = Σ(completed_tasks × minutes_saved_per_task)
+fte_saved = time_saved_minutes / monthly_work_minutes_per_fte
+B = money_saved = fte_saved × average_monthly_fte_cost
+net_benefit = B - A
+ROI = (B - A) / A × 100%
+payback_ratio = B / A
+```
+
+Для периода длиннее месяца Radar нормализует FTE как средний эквивалент мощности за период, а денежную экономию считает за весь период. При `A = 0` ROI/payback возвращаются как unavailable, а не бесконечность.
+
+**FTE Saved — эквивалент высвобождённого рабочего времени, а не количество уволенных сотрудников.** Demo default `average_monthly_fte_cost = 400 000 ₽` хранится в редактируемой методике, а не внутри формулы.
+
+## Полная стоимость AI
+
+`Cost Component` поддерживает token, inference, subscription, hardware depreciation, electricity, infrastructure, support, optional development team и other. Общие расходы распределяются по запросам, токенам, времени инференса, фиксированной доле или конкретному агенту. Стоимость команды разработки включается только настройкой методики. Внутренняя модель может иметь нулевой публичный token tariff и получать стоимость через инфраструктурные компоненты.
+
+## Фактические, оценочные и demo-данные
+
+- **Фактические production-источники:** gateway timestamps/status/errors, model и token usage провайдера, salted `user_id_hash`, переданные metadata, effective-dated model tariff.
+- **Требуют внешних production-интеграций:** HR role/team/location, FinOps/GPU/electricity/support, реестр подписок, task completion из бизнес-систем, A/B/нормативные benchmark, владельцы и эффект adoption.
+- **Demo/mock:** связный набор июля 2026 в `app/demo_enterprise.py`, включая четыре агента, шесть подразделений, tool usage, TCO, benchmark и adoption. В нём A = 1,17 млн ₽, B = 2,269 млн ₽. UI и API явно возвращают provenance `demo` и долю оценочных данных.
+
+Seed сохраняет конфигурационные и workflow-сущности в PostgreSQL; высокообъёмная серия запросов остаётся агрегированным mock, чтобы не выдавать synthetic события за production telemetry.
 
 ## MVP flow
 
@@ -120,6 +180,8 @@ H100 в v0.1.0 не используется. Средний размер зап
 - [Architecture Decisions](./docs/21-architecture-decisions.md)
 - [CI/CD](./docs/22-ci-cd.md)
 - [System Analytics](./docs/system-analytics.md)
+- [AI Best Practices и Knowledge Discovery](./docs/23-best-practices.md)
+- [Enterprise Effectiveness, TCO, ROI и Adoption](./docs/24-enterprise-effectiveness.md)
 
 Краткие entry points: [ARCHITECTURE.md](./ARCHITECTURE.md), [SECURITY.md](./SECURITY.md), [API.md](./API.md), [DEMO.md](./DEMO.md), [ROADMAP.md](./ROADMAP.md).
 
@@ -138,9 +200,7 @@ make up
 
 `api` контейнер применяет Alembic-миграции при старте. `worker` опрашивает `analysis_jobs` (`SELECT ... FOR UPDATE SKIP LOCKED`) и выполняет весь пайплайн анализа: embeddings → classification → clustering → scenario naming (LLM) → insights/recommendations (LLM). Полный контракт запуска — в [Deployment Specification](./docs/17-deployment.md).
 
-OpenAI-compatible proxy доступен по `POST /v1/chat/completions`, а объективная
-системная аналитика — по `/api/analytics/*`. Схема телеметрии, формулы,
-тарифы и примеры запросов описаны в [System Analytics](./docs/system-analytics.md).
+OpenAI-compatible proxy доступен по `POST /v1/chat/completions`, системная и бизнес-аналитика — по `/api/analytics/*`. Схема телеметрии описана в [System Analytics](./docs/system-analytics.md), а TCO/ROI и Knowledge Adoption — в [Enterprise Effectiveness](./docs/24-enterprise-effectiveness.md).
 
 Демонстрационный сквозной сценарий (`provider_mode=mock`, без внешних ключей):
 
@@ -154,12 +214,44 @@ curl -X POST http://localhost:8000/api/v1/runs/{run_id}/reports
 curl http://localhost:8000/api/v1/reports/{report_id}/download -o report.pdf
 ```
 
+### Миграции и demo seed
+
+```powershell
+docker compose up -d db
+docker compose run --rm api alembic upgrade head
+docker compose run --rm api python -m app.seed_demo
+```
+
+`alembic downgrade 0004` удаляет только enterprise-сущности migration `0005`. Seed идемпотентен и не сохраняет тексты промптов.
+
+### Проверки
+
+```powershell
+.\backend\.venv\Scripts\python.exe -m pytest backend
+.\backend\.venv\Scripts\python.exe -m ruff check backend
+cd frontend
+npm run lint
+npm run build
+```
+
+### Основные API Enterprise MVP
+
+- `GET /api/analytics/{overview,usage,models,agents,tools,departments,costs,business-effect,roi,insights}`;
+- `GET|PUT /api/methodology`;
+- `GET|POST /api/cost-components`, `PUT|DELETE /api/cost-components/{id}`;
+- полный Best Practice lifecycle: review, approve, reject, publish, recommend и adoption.
+
+Все агрегированные analytics endpoints принимают `date_from`, `date_to`, `department`, `role`, `user`, `agent`, `model`, `scenario`, `tool`.
+
 ### Известные упрощения MVP (см. код для деталей)
 
 - **Embeddings** — детерминированный hashing-векторизатор (`app/domain/embeddings.py`), не обученная семантическая модель; реальная локальная модель выбирается после аудита reference dataset (docs/10-ai-pipeline.md).
 - **Classification** — keyword-fallback (`app/domain/classification.py`), объяснимый baseline, а не семантический классификатор.
 - **Clustering** — жадная косинусная кластеризация (`app/domain/clustering.py`), плейсхолдер до выбора алгоритма по ADR (docs/09-architecture.md).
 - **Chunking длинных запросов** (100k-token records) не реализован — каждая запись обрабатывается как один chunk.
+- **Причинность:** денежная экономия не считается фактической без утверждённого Scenario Benchmark; экспертные оценки помечаются.
+- **Demo analytics adapter:** полный enterprise dashboard питается связным synthetic dataset; production DB adapter для HR/FinOps/business outcome sources остаётся интеграционной задачей.
+- **Права workflow:** demo tenant используется без production IAM; production review/adoption требует RBAC и audit log.
 - PDF-отчёт использует встроенный DejaVu Sans (для кириллицы); шрифт ставится в образ через `fonts-dejavu-core` (см. `backend/Dockerfile`).
 
 ## CI/CD

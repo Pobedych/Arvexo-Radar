@@ -23,7 +23,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import {
   BestPractice,
@@ -32,6 +32,7 @@ import {
   fetchPracticeTop,
   recommendPractice,
 } from "../lib/best-practices";
+import { createRun, pollRunUntilDone, RunSummary, uploadDataset } from "../lib/datasets";
 import {
   EnterpriseFilters,
   fetchAgents,
@@ -40,6 +41,7 @@ import {
   fetchOverview,
   fetchTools,
 } from "../lib/enterprise";
+import { createReport, downloadReportPdf, pollReportUntilDone } from "../lib/reports";
 import {
   AgentsView,
   DepartmentsView,
@@ -171,12 +173,184 @@ function DiscoveryView({ top }: { top: Awaited<ReturnType<typeof fetchPracticeTo
   return <section><div className="page-heading discovery-heading"><div><h1>Knowledge Discovery</h1><p>Сигналы о том, где рождаются эффективные способы работы и куда их стоит переносить.</p></div><span className="live-badge"><Sparkle size={14} weight="fill" />Правила MVP</span></div><div className="discovery-rankings"><RankedPracticeList title="ТОП новых практик" items={top.new} metric="date" /><RankedPracticeList title="Быстрорастущие" items={top.fast_growing} metric="growth" /><RankedPracticeList title="Самые эффективные" items={top.most_effective} metric="impact" /></div><div className="discovery-groups"><article className="panel group-panel"><div className="group-heading"><Buildings size={19} /><div><h2>Практики по подразделениям</h2><p>Где сформировались повторяемые сценарии</p></div></div><div className="group-list">{groups(top.by_department).map(([name, items]) => <div key={name}><span>{name}</span><b>{items.length}</b><small>лучший Impact {Math.round(Math.max(...items.map((item) => item.impact_score)))}</small></div>)}</div></article><article className="panel group-panel"><div className="group-heading"><Robot size={19} /><div><h2>Практики по моделям</h2><p>Какие модели используются в успешных сценариях</p></div></div><div className="group-list">{groups(top.by_model).map(([name, items]) => <div key={name}><span>{name}</span><b>{items.length}</b><small>{items.reduce((sum, item) => sum + item.usage_count, 0)} использований</small></div>)}</div></article></div></section>;
 }
 
-function SupportingView({ view }: { view: "reports" }) {
-  const content = {
-    reports: { icon: FileText, title: "Отчёты", description: "Сформированные управленческие отчёты Radar.", rows: [["Сводный анализ за июль", "25 июл. 2026"], ["Эффективность подразделений", "24 июл. 2026"], ["Каталог лучших практик", "24 июл. 2026"], ["Качество AI-агентов", "23 июл. 2026"]] },
-  }[view];
-  const Icon = content.icon;
-  return <section><div className="page-heading"><div><h1>{content.title}</h1><p>{content.description}</p></div></div><article className="panel data-view"><div className="data-view-icon"><Icon size={24} /></div><div>{content.rows.map(([label, value]) => <div className="data-row" key={label}><strong>{label}</strong><span>{value}</span><CaretRight size={15} /></div>)}</div></article></section>;
+type ReportStage = "idle" | "generating" | "downloading" | "error";
+
+function ReportsView({
+  run,
+  onRequestUpload,
+}: {
+  run: RunSummary | null;
+  onRequestUpload: () => void;
+}) {
+  const [stage, setStage] = useState<ReportStage>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const staticRows: [string, string][] = [
+    ["Сводный анализ за июль", "25 июл. 2026"],
+    ["Эффективность подразделений", "24 июл. 2026"],
+    ["Каталог лучших практик", "24 июл. 2026"],
+    ["Качество AI-агентов", "23 июл. 2026"],
+  ];
+
+  const generateAndDownload = async () => {
+    if (!run) return;
+    setStage("generating");
+    setError(null);
+    try {
+      const report = await createReport(run.run_id);
+      const ready = await pollReportUntilDone(report.report_id);
+      if (ready.status !== "generated") {
+        throw new Error(ready.safe_error ?? "Отчёт не удалось сформировать.");
+      }
+      setStage("downloading");
+      await downloadReportPdf(ready.report_id);
+      setStage("idle");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Не удалось сформировать PDF-отчёт.");
+      setStage("error");
+    }
+  };
+
+  return (
+    <section>
+      <div className="page-heading">
+        <div>
+          <h1>Отчёты</h1>
+          <p>Сформированные управленческие отчёты Radar.</p>
+        </div>
+      </div>
+      <article className="panel data-view">
+        <div className="data-view-icon"><FileText size={24} /></div>
+        <div>
+          {run ? (
+            <div className="data-row">
+              <strong>PDF-отчёт по текущему прогону анализа</strong>
+              <span>{run.status === "completed" ? "Готов к формированию" : `Статус прогона: ${run.status}`}</span>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={run.status !== "completed" || stage === "generating" || stage === "downloading"}
+                onClick={generateAndDownload}
+              >
+                {stage === "generating" || stage === "downloading" ? (
+                  <GearSix size={16} className="spin" />
+                ) : (
+                  <DownloadSimple size={16} />
+                )}
+                {stage === "generating" ? "Формируем PDF..." : stage === "downloading" ? "Скачиваем..." : "Скачать PDF"}
+              </button>
+            </div>
+          ) : (
+            <div className="data-row">
+              <strong>Нет активного прогона анализа</strong>
+              <span>Загрузите датасет, чтобы сформировать PDF-отчёт по своим данным.</span>
+              <button type="button" className="secondary-button" onClick={onRequestUpload}>
+                <Database size={16} />
+                Загрузить датасет
+              </button>
+            </div>
+          )}
+          {error && <p className="upload-error" role="alert">{error}</p>}
+          {staticRows.map(([label, value]) => (
+            <div className="data-row" key={label}>
+              <strong>{label}</strong>
+              <span>{value}</span>
+              <CaretRight size={15} />
+            </div>
+          ))}
+        </div>
+      </article>
+    </section>
+  );
+}
+
+type UploadStage = "idle" | "uploading" | "validating" | "analyzing" | "error";
+
+function DatasetUploadModal({
+  onClose,
+  onCompleted,
+}: {
+  onClose: () => void;
+  onCompleted: (run: RunSummary) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [stage, setStage] = useState<UploadStage>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  const stageLabel: Record<UploadStage, string> = {
+    idle: "Выберите CSV-файл с запросами пользователей к ИИ-агенту.",
+    uploading: "Загружаем и валидируем датасет...",
+    validating: "Проверяем структуру и данные...",
+    analyzing: "Запускаем классификацию и кластеризацию...",
+    error: "Не удалось обработать датасет.",
+  };
+
+  const handleFile = async (file: File) => {
+    setFileName(file.name);
+    setError(null);
+    setStage("uploading");
+    try {
+      const dataset = await uploadDataset(file);
+      setStage("analyzing");
+      const run = await createRun(dataset.id);
+      const finished = await pollRunUntilDone(run.run_id);
+      if (finished.status !== "completed") {
+        throw new Error(`Анализ завершился со статусом «${finished.status}».`);
+      }
+      onCompleted(finished);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Не удалось обработать датасет.");
+      setStage("error");
+    }
+  };
+
+  const busy = stage === "uploading" || stage === "validating" || stage === "analyzing";
+
+  return (
+    <div className="modal-overlay" role="presentation" onClick={busy ? undefined : onClose}>
+      <div
+        className="panel upload-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Загрузка собственного датасета"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="page-heading">
+          <div>
+            <h1>Загрузить собственный датасет</h1>
+            <p>CSV с запросами пользователей к ИИ-агенту — Radar классифицирует их и найдёт сценарии.</p>
+          </div>
+          {!busy && (
+            <button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть">
+              <X size={18} />
+            </button>
+          )}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void handleFile(file);
+          }}
+        />
+        <div className="empty-state upload-dropzone">
+          {busy ? <GearSix size={28} className="spin" /> : <Database size={28} />}
+          <h2>{fileName ?? "Ещё не выбран файл"}</h2>
+          <p>{stageLabel[stage]}</p>
+          {error && <p className="upload-error" role="alert">{error}</p>}
+          {!busy && (
+            <button type="button" className="primary-button" onClick={() => fileInputRef.current?.click()}>
+              <Database size={16} />
+              Выбрать CSV-файл
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function LoadingState() {
@@ -191,6 +365,8 @@ export function RadarDashboard() {
   const [publishedIds, setPublishedIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [currentRun, setCurrentRun] = useState<RunSummary | null>(null);
   const [filters, setFilters] = useState<EnterpriseFilters>({ date_from: "2026-07-01", date_to: "2026-08-01" });
   const practiceQuery = useQuery({ queryKey: ["best-practices"], queryFn: fetchPractices });
   const topQuery = useQuery({ queryKey: ["best-practices", "top"], queryFn: fetchPracticeTop });
@@ -236,6 +412,18 @@ export function RadarDashboard() {
   };
 
   return <div className="app-shell">
+    {uploadOpen && (
+      <DatasetUploadModal
+        onClose={() => setUploadOpen(false)}
+        onCompleted={(run) => {
+          setCurrentRun(run);
+          setUploadOpen(false);
+          setToast("Датасет загружен и проанализирован — можно сформировать отчёт");
+          window.setTimeout(() => setToast(null), 3200);
+          navigate("reports");
+        }}
+      />
+    )}
     <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
       <div className="brand-row"><button type="button" className="brand" onClick={() => navigate("overview")}><span>R</span>Radar</button><button type="button" className="icon-button mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Закрыть меню"><X size={20} /></button></div>
       <nav className="navigation" aria-label="Основная навигация">{navGroups.map((group) => <div className="nav-group" key={group.label}><p>{group.label}</p>{group.items.map((item) => { const Icon = item.icon; return <button type="button" className={`nav-item ${view === item.id ? "active" : ""}`} onClick={() => navigate(item.id)} key={item.id}><Icon size={18} /><span>{item.label}</span>{item.id === "best-practices" && practices.filter((practice) => practice.status === "detected").length > 0 && <b>{practices.filter((practice) => practice.status === "detected").length}</b>}</button>; })}</div>)}</nav>
@@ -244,11 +432,11 @@ export function RadarDashboard() {
     {sidebarOpen && <button className="scrim" aria-label="Закрыть меню" onClick={() => setSidebarOpen(false)} />}
 
     <main className="main-content">
-      <header className="topbar"><div className="topbar-left"><button type="button" className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню"><List size={20} /></button><div className="breadcrumb"><span>Рабочее пространство</span><CaretRight size={12} /><span>Июль 2026</span><CaretRight size={12} /><strong>{viewTitles[view]}</strong></div></div><div className="topbar-actions"><button type="button" className="secondary-button" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><FunnelSimple size={16} />Фильтры<span>{Object.values(filters).filter(Boolean).length}</span></button><button type="button" className="primary-button" onClick={exportReport}><DownloadSimple size={16} />Экспорт отчёта</button><span className="user-avatar" aria-label="Профиль пользователя">U</span></div></header>
+      <header className="topbar"><div className="topbar-left"><button type="button" className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню"><List size={20} /></button><div className="breadcrumb"><span>Рабочее пространство</span><CaretRight size={12} /><span>Июль 2026</span><CaretRight size={12} /><strong>{viewTitles[view]}</strong></div></div><div className="topbar-actions"><button type="button" className="secondary-button" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><FunnelSimple size={16} />Фильтры<span>{Object.values(filters).filter(Boolean).length}</span></button><button type="button" className="secondary-button" onClick={() => setUploadOpen(true)}><Database size={16} />Загрузить датасет</button><button type="button" className="primary-button" onClick={exportReport}><DownloadSimple size={16} />Экспорт отчёта</button><span className="user-avatar" aria-label="Профиль пользователя">U</span></div></header>
       {filtersOpen && <section className="filter-panel enterprise-filters"><label><span>С</span><input type="date" value={filters.date_from ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_from: event.target.value }))}/></label><label><span>По</span><input type="date" value={filters.date_to ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_to: event.target.value }))}/></label><label><span>Подразделение</span><select value={filters.department ?? ""} onChange={(event) => setFilters((old) => ({ ...old, department: event.target.value }))}><option value="">Все</option><option>Юридический отдел</option><option>Финансы</option><option>Продажи</option><option>HR</option><option>ИТ</option></select></label><label><span>Роль</span><select value={filters.role ?? ""} onChange={(event) => setFilters((old) => ({ ...old, role: event.target.value }))}><option value="">Все</option><option>Юрист</option><option>Аналитик</option><option>Менеджер по продажам</option><option>HR-партнёр</option></select></label><label><span>Пользователь (hash)</span><input value={filters.user ?? ""} onChange={(event) => setFilters((old) => ({ ...old, user: event.target.value }))} placeholder="user_id_hash" /></label><label><span>Агент</span><select value={filters.agent ?? ""} onChange={(event) => setFilters((old) => ({ ...old, agent: event.target.value }))}><option value="">Все</option>{agentsQuery.data?.data.items.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></label><label><span>Модель</span><select value={filters.model ?? ""} onChange={(event) => setFilters((old) => ({ ...old, model: event.target.value }))}><option value="">Все</option><option>GigaChat Pro</option><option>YandexGPT 5 Pro</option><option>Corporate LLM 70B</option></select></label><label><span>Сценарий</span><select value={filters.scenario ?? ""} onChange={(event) => setFilters((old) => ({ ...old, scenario: event.target.value }))}><option value="">Все</option><option value="contract-review">Проверка договоров</option><option value="management-report">Управленческий отчёт</option><option value="crm-followup">Follow-up в CRM</option></select></label><label><span>Инструмент</span><select value={filters.tool ?? ""} onChange={(event) => setFilters((old) => ({ ...old, tool: event.target.value }))}><option value="">Все</option><option>Корпоративные документы</option><option>CRM</option><option>Почта</option><option>Браузер</option></select></label><button type="button" className="text-button" onClick={() => setFiltersOpen(false)}>Готово</button><button type="button" className="text-button muted" onClick={() => setFilters({ date_from: "2026-07-01", date_to: "2026-08-01" })}>Сбросить</button></section>}
       <div className="page-content">
         {isDemoData && <div className="demo-banner" role="status"><WarningCircle size={18} weight="fill" />Radar API недоступен — показаны demo-данные, они не отражают реальное использование ИИ в организации.</div>}
-        {practiceQuery.isLoading || overviewQuery.isLoading || agentsQuery.isLoading ? <LoadingState /> : view === "overview" && overviewQuery.data ? <EnterpriseOverview data={overviewQuery.data.data} practices={practices} onOpenPractices={() => navigate("best-practices")} /> : view === "efficiency" && overviewQuery.data && agentsQuery.data ? <EfficiencyView overview={overviewQuery.data.data} agents={agentsQuery.data.data.items} /> : view === "agents" && agentsQuery.data ? <AgentsView data={agentsQuery.data.data} /> : view === "departments" && departmentsQuery.data ? <DepartmentsView data={departmentsQuery.data.data} /> : view === "best-practices" ? <><BestPracticesView practices={practices} onRecommend={handleRecommend} pendingId={pendingId} />{topQuery.data && <DiscoveryView top={topQuery.data} />}</> : view === "insights" && overviewQuery.data ? <InsightsView overview={overviewQuery.data.data} /> : view === "sources" && toolsQuery.data && overviewQuery.data ? <SourcesView tools={toolsQuery.data.data} overview={overviewQuery.data.data} /> : view === "methodology" && methodologyQuery.data ? <MethodologyView initial={methodologyQuery.data.data} /> : <SupportingView view="reports" />}
+        {practiceQuery.isLoading || overviewQuery.isLoading || agentsQuery.isLoading ? <LoadingState /> : view === "overview" && overviewQuery.data ? <EnterpriseOverview data={overviewQuery.data.data} practices={practices} onOpenPractices={() => navigate("best-practices")} /> : view === "efficiency" && overviewQuery.data && agentsQuery.data ? <EfficiencyView overview={overviewQuery.data.data} agents={agentsQuery.data.data.items} /> : view === "agents" && agentsQuery.data ? <AgentsView data={agentsQuery.data.data} /> : view === "departments" && departmentsQuery.data ? <DepartmentsView data={departmentsQuery.data.data} /> : view === "best-practices" ? <><BestPracticesView practices={practices} onRecommend={handleRecommend} pendingId={pendingId} />{topQuery.data && <DiscoveryView top={topQuery.data} />}</> : view === "insights" && overviewQuery.data ? <InsightsView overview={overviewQuery.data.data} /> : view === "sources" && toolsQuery.data && overviewQuery.data ? <SourcesView tools={toolsQuery.data.data} overview={overviewQuery.data.data} /> : view === "methodology" && methodologyQuery.data ? <MethodologyView initial={methodologyQuery.data.data} /> : <ReportsView run={currentRun} onRequestUpload={() => setUploadOpen(true)} />}
         <footer className="page-footer"><span>Период: июль 2026 · методика v1</span><span>{isDemoData ? "Demo/Mock — явно помечено" : "Данные Radar API"} | Подразделений 6 | Сценариев 4 | AI-агентов 4</span></footer>
       </div>
     </main>

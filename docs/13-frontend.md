@@ -31,6 +31,14 @@ frontend/
 
 ## 3. Routes
 
+Текущий Dashboard shell доступен на `/` и содержит внутренние views исходного предоставленного макета. Для устойчивых ссылок целевой routing contract:
+
+- `/` - Executive Overview;
+- `/best-practices` - каталог AI Best Practices;
+- `/knowledge-discovery` - Knowledge Discovery.
+
+До выделения отдельных routes view и filters обязаны сериализоваться в query string; состояние только в `useState` считается MVP-ограничением.
+
 - `/datasets`
 - `/datasets/new`
 - `/datasets/[datasetId]/validation`
@@ -70,6 +78,8 @@ Reason, confidence/quality, evidence count, masked excerpts, model/config proven
 
 Route error boundary показывает safe message, correlation ID и релевантное действие. Ошибки section-level не обрушивают весь overview. Никогда не рендерится необработанный HTML из dataset/LLM.
 
+Fallback на встроенные Best Practice fixtures включается только при явном demo environment. В api/production environment network/HTTP error остаётся error state.
+
 ## 10. Security
 
 - no `dangerouslySetInnerHTML` для данных/LLM output;
@@ -96,10 +106,13 @@ Route error boundary показывает safe message, correlation ID и рел
 - **FE-AC-04:** raw/unsafe HTML не рендерится.
 - **FE-AC-05:** UI не содержит provider secret.
 - **FE-AC-06:** основной demo flow доступен с клавиатуры.
+- **FE-AC-07:** Best Practices и Knowledge Discovery имеют permalink или воспроизводимый URL state.
+- **FE-AC-08:** approve и publish представлены отдельными production actions.
+- **FE-AC-09:** demo fallback не маскирует production failure.
 
 ## 13. Связанные документы
 
 - [Dashboard](./11-dashboard.md)
 - [API](./15-api.md)
 - [Security](./16-security.md)
-
+- [AI Best Practices](./23-best-practices.md)

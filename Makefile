@@ -1,4 +1,4 @@
-.PHONY: up down logs api-shell migrate test lint
+.PHONY: up down logs api-shell migrate seed test lint
 
 up:
 	docker compose up --build
@@ -14,6 +14,9 @@ api-shell:
 
 migrate:
 	docker compose exec api alembic upgrade head
+
+seed:
+	docker compose exec api python -m app.seed_demo
 
 test:
 	cd backend && python -m pytest

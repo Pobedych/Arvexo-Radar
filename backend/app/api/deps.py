@@ -11,9 +11,17 @@ from app.application.generate_report import GenerateReport
 from app.application.run_queries import RunQueries
 from app.config import Settings, get_settings
 from app.infrastructure.db.session import get_session
+from app.infrastructure.providers.openai_proxy import OpenAIProxyClient
 from app.infrastructure.storage import DatasetStorage, ReportStorage
 from app.repositories.analysis_repository import AnalysisRepository
+from app.repositories.analytics_repository import AnalyticsRepository
+from app.repositories.best_practice_repository import BestPracticeRepository
 from app.repositories.dataset_repository import DatasetRepository
+from app.services.analytics_telemetry import TelemetryRecorder
+from app.services.enterprise_analytics import (
+    EnterpriseAnalyticsService,
+    enterprise_analytics_service,
+)
 
 
 def get_dataset_storage(settings: Settings = Depends(get_settings)) -> DatasetStorage:
@@ -42,6 +50,36 @@ async def get_analysis_repository(
     session: AsyncSession = Depends(get_session),
 ) -> AsyncIterator[AnalysisRepository]:
     yield AnalysisRepository(session)
+
+
+async def get_analytics_repository(
+    session: AsyncSession = Depends(get_session),
+) -> AsyncIterator[AnalyticsRepository]:
+    yield AnalyticsRepository(session)
+
+
+def get_telemetry_recorder(settings: Settings = Depends(get_settings)) -> TelemetryRecorder:
+    return TelemetryRecorder(settings)
+
+
+def get_enterprise_analytics_service() -> EnterpriseAnalyticsService:
+    return enterprise_analytics_service
+
+
+async def get_openai_proxy_client(
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[OpenAIProxyClient]:
+    client = OpenAIProxyClient(settings)
+    try:
+        yield client
+    finally:
+        await client.aclose()
+
+
+async def get_best_practice_repository(
+    session: AsyncSession = Depends(get_session),
+) -> AsyncIterator[BestPracticeRepository]:
+    yield BestPracticeRepository(session)
 
 
 async def get_create_analysis_run_use_case(

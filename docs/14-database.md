@@ -30,6 +30,8 @@ erDiagram
     ANALYSIS_RUN ||--o{ INSIGHT : derives
     INSIGHT ||--o{ RECOMMENDATION : supports
     ANALYSIS_RUN ||--o{ REPORT : renders
+    TENANT ||--o{ BEST_PRACTICE : owns
+    SCENARIO ||--o| BEST_PRACTICE : promotes
 ```
 
 ## 3. Таблицы
@@ -86,6 +88,12 @@ Typed statement/action, confidence, limitations, generation provenance. Evidence
 
 `id`, `run_id`, `status`, `format`, `storage_ref`, `checksum`, `generated_at`, `safe_error`.
 
+### `best_practices`
+
+Tenant-scoped каталог обнаруженных практик. Основные поля: `title`, `short_description`, `department`, `scenario`, `detected_at`, `status`, `confidence_score`, `impact_score`, `adoption_count`, `estimated_time_saved`, `estimated_fte_saved`, `tags`. Поля evidence агрегатов: `user_count`, `usage_count`, `average_rating`, `success_rate`, `error_rate`, `growth_rate`, `departments`, `models`, `detection_evidence`, `recommendation`. Unique `(tenant_id, source_scenario_id)` не допускает повторного создания кандидата при повторном запуске detector.
+
+`estimated_time_saved` хранится в часах за observation period. `detection_evidence` содержит classifier version, matched rules, границы периода и basis для FTE/growth. При неизвестном периоде FTE и growth должны быть nullable/unavailable, а не фиктивным нулём.
+
 ## 4. Индексы
 
 - tenant/resource composite indexes;
@@ -120,6 +128,8 @@ Alembic revisions линейны для MVP, имеют upgrade и безопа�
 - **DB-AC-04:** job claim безопасен при нескольких workers.
 - **DB-AC-05:** migrations разворачивают пустую DB.
 - **DB-AC-06:** cache не содержит raw provider input.
+- **DB-AC-07:** source scenario создаёт не более одной Best Practice на tenant.
+- **DB-AC-08:** period-dependent metrics содержат period evidence или unavailable.
 
 ## 9. Связанные документы
 
@@ -127,4 +137,4 @@ Alembic revisions линейны для MVP, имеют upgrade и безопа�
 - [Architecture](./09-architecture.md)
 - [Backend](./12-backend.md)
 - [Security](./16-security.md)
-
+- [AI Best Practices](./23-best-practices.md)
