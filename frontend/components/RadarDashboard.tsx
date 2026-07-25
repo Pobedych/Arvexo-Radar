@@ -471,6 +471,27 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
         </div>
       )}
 
+      <section className="kpi-section" aria-label="Ключевые показатели датасета">
+        <div className="metric-grid usage-grid">
+          <article className="metric-card primary-metric">
+            <div className="metric-label"><span>Обработано запросов</span></div>
+            <strong>{overview.total_records}</strong>
+          </article>
+          <article className="metric-card">
+            <div className="metric-label"><span>Категорий найдено</span></div>
+            <strong>{overview.top_categories.length}</strong>
+          </article>
+          <article className="metric-card">
+            <div className="metric-label"><span>Устойчивых сценариев</span></div>
+            <strong>{overview.top_scenarios.filter((s) => !s.is_noise).length}</strong>
+          </article>
+          <article className="metric-card">
+            <div className="metric-label"><span>Находок prompt health/security</span></div>
+            <strong>{overview.top_findings.reduce((sum, f) => sum + f.count, 0)}</strong>
+          </article>
+        </div>
+      </section>
+
       <div className="panel-grid">
         <article className="panel">
           <div className="panel-heading"><h2>Топ категорий запросов</h2><p>Доля считается от {overview.denominator} классифицированных запросов</p></div>
