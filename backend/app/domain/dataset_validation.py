@@ -113,6 +113,13 @@ def parse_and_validate(
     *,
     max_row_chars: int,
 ) -> DatasetParseResult:
+    # The stdlib csv module enforces its own hard field-size cap (128KB by
+    # default) independent of max_row_chars. Without raising it, any row
+    # longer than that trips a bare csv.Error mid-iteration, which the catch
+    # below mislabels as V004 (invalid structure) and silently drops every
+    # row read so far and after — not the intended V007 (row too long).
+    csv.field_size_limit(max(csv.field_size_limit(), max_row_chars + 1024))
+
     result = DatasetParseResult()
 
     if not raw_bytes.strip():
