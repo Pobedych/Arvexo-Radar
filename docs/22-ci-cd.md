@@ -24,7 +24,7 @@ flowchart LR
 Два независимых workflow:
 
 - **CI** (`ci.yml`) — на каждый push в любую ветку и на каждый PR в `main`. Ничего не публикует и не требует деплойных секретов.
-- **CD** (`cd.yml`) — на push в `main` и на теги `v*.*.*`. Публикует образы в GHCR; автоматический деплой на сервер выполняется только для `main`.
+- **CD** (`cd.yml`) — на завершение CI на `main` (нативное событие `workflow_run`, без polling) и на теги `v*.*.*`. Публикует образы в GHCR; автоматический деплой на сервер выполняется только для ветки `main`.
 
 ## 3. CI: что проверяется
 
@@ -39,15 +39,15 @@ flowchart LR
 
 ## 4. CD: сборка и публикация образов
 
-`cd.yml` запускается на `push` в `main` и на теги `v*.*.*` (workflow_dispatch тоже доступен для ручного прогона).
+`cd.yml` запускается на `workflow_run` (когда `ci.yml` завершается на `main`), на push тега `v*.*.*`, и вручную (`workflow_dispatch`).
 
-1. **`wait-for-ci`** — ждёт, что CI-проверки на этом же commit SHA зелёные (`lewagon/wait-on-check-action`), прежде чем собирать что-либо. Красный `main` не должен доехать до образа.
-2. **`build-and-push`** — собирает и пушит в GHCR два образа:
+1. **Гейт по CI** — не отдельный job, а условие триггера: `workflow_run: { workflows: ["CI"], types: [completed], branches: [main] }` срабатывает событием сразу по завершении `ci.yml`, без polling и без отдельного раннера, который бы просто ждал. `build-and-push` дополнительно проверяет `github.event.workflow_run.conclusion == 'success'`, чтобы красный CI не породил образ. Раньше это делал сторонний `lewagon/wait-on-check-action` отдельным job'ом (`wait-for-ci`) — заменён на нативный механизм GitHub, потому что 3rd-party polling-экшн иногда сам подолгу ждал свободный раннер и вносил задержку в десятки минут при обычной нагрузке очереди раннеров.
+2. **`build-and-push`** — собирает и пушит в GHCR два образа с коммита `github.event.workflow_run.head_sha` (SHA, который реально проверил CI, а не текущий tip ветки на момент срабатывания `workflow_run`):
    - `ghcr.io/<owner>/<repo>-api` — единый образ для `api` и `worker` (различаются только `command:`, как и в dev `docker-compose.yml`);
    - `ghcr.io/<owner>/<repo>-web` — фронтенд.
 
    Каждый образ получает три тега (`docker/metadata-action`): `latest` (только для `main`), `sha-<short>` (всегда) и semver-тег `X.Y.Z` (только когда триггер — тег `vX.Y.Z`). Деплой всегда использует `sha-<short>` конкретного commit, а не мутирующий `latest`, чтобы не поймать гонку с параллельным пушем.
-3. **`deploy`** — выполняется только если `github.ref == 'refs/heads/main'` (пуш тега публикует образы, но не трогает сервер — это осознанное решение см. раздел 8). Использует `docker/setup-buildx-action` + `type=gha` layer cache, поэтому повторные сборки быстрее холодных.
+3. **`deploy`** — выполняется, если событие — `workflow_run` (пуш тега публикует образы, но не трогает сервер — осознанное решение, см. раздел 8) либо ручной запуск с `deploy: true`. Использует `docker/setup-buildx-action` + `type=gha` layer cache, поэтому повторные сборки быстрее холодных.
 
 ## 5. CD: деплой на сервер
 
@@ -127,7 +127,7 @@ cp .env.example .env   # затем заполнить реальными зна
 ## 8. Явные решения и их причины
 
 - **Деплой только с `main`, не с тегов.** Тег может резать релиз заранее (например, для changelog) без немедленного выката; `main` — источник истины для того, что реально работает на сервере.
-- **`wait-for-ci` вместо дублирования тестов в CD.** Не гонять pytest/ruff дважды: CD доверяет CI-статусу того же commit SHA.
+- **`workflow_run` вместо дублирования тестов в CD.** Не гонять pytest/ruff дважды: CD доверяет CI-статусу того же commit SHA и запускается событием по его завершении, без polling.
 - **`docker-compose.prod.yml` не overlay.** См. раздел 5 — портируемость важнее сухости (DRY) конфигурации.
 - **SSH, не self-hosted runner/Kubernetes.** Соответствует зафиксированному стеку (docs/09-architecture.md: Docker Compose, без оркестраторов) и Hackathon MVP scope.
 
@@ -136,10 +136,11 @@ cp .env.example .env   # затем заполнить реальными зна
 | Симптом | Где смотреть |
 |---|---|
 | CI красный на `backend-test` | Логи job — миграция или тест; локально: `docker compose run --rm api alembic upgrade head && docker compose run --rm api python -m pytest -q` |
-| CD зависла на `wait-for-ci` | Проверить, что CI вообще запустился на этом SHA (иногда — при push тега без предварительного push в ветку) |
+| `build-and-push` не запустился после мержа в `main` | `workflow_run` срабатывает только на **завершение** `ci.yml` (`types: [completed]`), не на его старт — подожди, пока CI реально закончится; также проверь, что `name:` в `ci.yml` остался `CI` (должен совпадать с `workflows: ["CI"]` в `cd.yml`) |
+| `build-and-push` не собрался, хотя CI зелёный | Проверить `github.event.workflow_run.conclusion` в логе шага `if:` — CD доверяет именно conclusion того run, не текущему статусу ветки |
 | `deploy` упала на `docker login` | `DEPLOY_*` secrets или сетевой доступ сервера до `ghcr.io` |
 | `deploy` упала на smoke test | `docker compose -f docker-compose.prod.yml logs api` на сервере; чаще всего — не заполнен `.env` |
-| Образ есть в GHCR, но деплой не запустился | Проверить `github.ref` события — деплой не триггерится на push тега (см. раздел 8) |
+| Образ есть в GHCR, но деплой не запустился | Пуш тега публикует образы, но не деплоит (см. раздел 8); деплой срабатывает только на `workflow_run` с `main` или ручной `workflow_dispatch` с `deploy: true` |
 
 ## 10. Acceptance criteria
 

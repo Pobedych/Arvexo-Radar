@@ -3,9 +3,17 @@ name: CD
 # Builds and publishes container images to GHCR, then (on main only)
 # deploys them to the target server over SSH. See docs/22-ci-cd.md for the
 # full pipeline description and the secrets this workflow needs.
+#
+# The main-branch path is gated on CI via the native `workflow_run` event
+# (fires the instant the CI workflow finishes) rather than a third-party
+# polling action — no extra job, no wait-interval delay, no separate
+# runner just to sit there polling the checks API.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
+  push:
     tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
@@ -26,30 +34,27 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # CI must be green on this exact commit before we build/deploy anything
-  # from it — a red `main` never reaches the server.
-  wait-for-ci:
-    name: Wait for CI
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for CI workflow on this commit
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.sha }}
-          check-regexp: '^(Backend|Frontend|Docker).*'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 15
-          allowed-conclusions: success
-
   build-and-push:
     name: Build & push images
-    needs: wait-for-ci
     runs-on: ubuntu-latest
+    # A failed/cancelled CI run on main must not produce or deploy an
+    # image; tag pushes and manual dispatch aren't gated on CI at all.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     outputs:
       api_image: ${{ steps.api_meta.outputs.tags }}
       web_image: ${{ steps.web_meta.outputs.tags }}
+      commit_sha: ${{ steps.resolve_sha.outputs.value }}
     steps:
+      - name: Resolve commit SHA to build
+        id: resolve_sha
+        # workflow_run's own github.sha is the workflow FILE's branch tip,
+        # not necessarily the commit CI actually validated — always use
+        # the triggering run's head_sha when present.
+        run: echo "value=${{ github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve_sha.outputs.value }}
 
       - name: Lowercase image namespace
         id: namespace
@@ -110,12 +115,13 @@ jobs:
     name: Deploy to server
     needs: build-and-push
     runs-on: ubuntu-latest
-    # Tag pushes (v1.2.3) publish images for a manual/controlled rollout;
-    # only a merge to main auto-deploys. workflow_dispatch respects its
-    # `deploy` input so images can be built without touching the server.
+    # workflow_run only fires for main (see `branches:` filter above), so
+    # reaching this job that way already means "CI passed on main". Tag
+    # pushes publish images without touching the server; workflow_dispatch
+    # respects its own `deploy` input.
     if: |
-      github.ref == 'refs/heads/main' &&
-      (github.event_name != 'workflow_dispatch' || inputs.deploy)
+      github.event_name == 'workflow_run' ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy)
     environment:
       name: production
       url: https://radar.arvexo.ru
@@ -123,8 +129,9 @@ jobs:
       - name: Resolve image tags for this commit
         id: images
         run: |
-          echo "api=${REGISTRY,,}/${GITHUB_REPOSITORY,,}-api:sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "web=${REGISTRY,,}/${GITHUB_REPOSITORY,,}-web:sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          SHA="${{ needs.build-and-push.outputs.commit_sha }}"
+          echo "api=${REGISTRY,,}/${GITHUB_REPOSITORY,,}-api:sha-${SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "web=${REGISTRY,,}/${GITHUB_REPOSITORY,,}-web:sha-${SHA::7}" >> "$GITHUB_OUTPUT"
         env:
           REGISTRY: ${{ env.REGISTRY }}
 
