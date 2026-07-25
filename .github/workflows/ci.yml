@@ -1,0 +1,139 @@
+name: CI
+
+# Runs on every push/PR so a broken backend, broken migration, or broken
+# frontend build is caught before it reaches main — see docs/22-ci-cd.md.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  backend-lint:
+    name: Backend / lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend package
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: ruff check
+        working-directory: backend
+        run: ruff check app tests
+
+  backend-test:
+    name: Backend / migrate + pytest (real Postgres + pgvector)
+    runs-on: ubuntu-latest
+    # A real pgvector-enabled Postgres service, not sqlite/mocks: the schema
+    # uses JSONB and the vector extension (docs/14-database.md), so a fake
+    # backend would validate nothing about migrations or query correctness.
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: arvexo
+          POSTGRES_PASSWORD: arvexo
+          POSTGRES_DB: arvexo_radar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arvexo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ARVEXO_DATABASE_URL: postgresql+asyncpg://arvexo:arvexo@localhost:5432/arvexo_radar
+      ARVEXO_LLM_PROVIDER_MODE: mock
+      ARVEXO_AUTH_MODE: demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend package
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: Install DejaVu fonts (PDF report rendering, Cyrillic glyphs)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+
+      - name: alembic upgrade head
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: pytest
+        working-directory: backend
+        run: python -m pytest -q
+
+  frontend-build:
+    name: Frontend / typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+        run: npm run build
+
+  docker-build:
+    name: Docker / build images (no push)
+    runs-on: ubuntu-latest
+    # Catches a broken Dockerfile on every PR without needing registry
+    # credentials; the CD workflow does the real build-and-push on main.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend

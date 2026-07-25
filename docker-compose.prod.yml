@@ -1,0 +1,74 @@
+# Production compose file. Deliberately standalone rather than an override
+# of docker-compose.yml: Compose's merge semantics for lists (ports, volumes)
+# depend on `!reset`/`!override` YAML tags that need a fairly recent Compose
+# CLI, which a deploy server isn't guaranteed to have. A self-contained file
+# is more portable and its behavior is visible without cross-referencing
+# another file. Keep it in sync with docker-compose.yml when service shape
+# changes (see docs/22-ci-cd.md).
+#
+# Usage on the deploy server (see .github/workflows/cd.yml):
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Requires a .env file (copy .env.example) with real secrets/image tags —
+# never committed (docs/16-security.md SEC-09).
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-arvexo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arvexo}
+      POSTGRES_DB: ${POSTGRES_DB:-arvexo_radar}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    # Not published outside the Docker network in production
+    # (docs/16-security.md: "DB не публикуется в production profile").
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arvexo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    image: ${API_IMAGE}
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    env_file: .env
+    volumes:
+      - controlled_storage:/data/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    image: ${API_IMAGE}
+    command: python -m app.worker.main
+    env_file: .env
+    volumes:
+      - controlled_storage:/data/storage
+      - model_cache:/data/model-cache
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: ${WEB_IMAGE}
+    command: npm run start
+    env_file: .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  controlled_storage:
+  model_cache:
