@@ -21,8 +21,12 @@ class Settings(BaseSettings):
 
     storage_path: str = "/data/storage"
 
-    max_upload_bytes: int = 25_000_000
-    max_row_chars: int = 400_000
+    # 100MB / 2M chars per row: the case's own reference dataset generator
+    # (data/sample_datasets/generate_sample_dataset.py) produces RAG-augmented
+    # rows well above the "~100k tokens average" headline figure — some rows
+    # exceed 1.3M chars — so the limits must clear that, not just the average.
+    max_upload_bytes: int = 100_000_000
+    max_row_chars: int = 2_000_000
 
     llm_provider_mode: Literal["mock", "bothub", "local"] = "mock"
     bothub_api_key: SecretStr | None = None
