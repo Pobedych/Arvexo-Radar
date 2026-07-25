@@ -173,6 +173,32 @@ async def test_length_truncation_doubles_budget_without_longer_retry_prompt() ->
 
 
 @pytest.mark.asyncio
+async def test_retries_without_json_mode_when_model_rejects_response_format() -> None:
+    payloads: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payloads.append(json.loads(request.content))
+        if len(payloads) == 1:
+            return httpx.Response(400, json={"error": {"message": "provider detail"}})
+        return _completion('{"name":"Сводки","description":"Краткие сводки."}')
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = BothubProvider(_settings(), client=client, sleep=_no_sleep)
+        result = await provider.generate(
+            operation=LLMOperation.SCENARIO_NAMING,
+            schema_version="v1",
+            evidence={"typical_phrasings": ["пример"], "evidence_refs": ["scenario:1"]},
+            locale="ru-RU",
+            idempotency_key="run:scenario:json-mode",
+        )
+
+    assert "response_format" in payloads[0]
+    assert "response_format" not in payloads[1]
+    assert len(payloads[1]["messages"]) == 2
+    assert result.data["name"] == "Сводки"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "content",
     [

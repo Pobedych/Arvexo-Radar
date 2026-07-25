@@ -181,6 +181,22 @@ class BothubProvider:
             except _AttemptError as exc:
                 failure = exc
 
+            json_mode_rejected = (
+                failure.code is LLMErrorCode.HTTP_ERROR
+                and failure.safe_details.get("status_code") == 400
+                and "response_format" in payload
+            )
+            if json_mode_rejected:
+                # Some BotHub routes (notably Gemini Flash-Lite) reject the
+                # OpenAI json_object switch even though they follow an explicit
+                # JSON-only prompt correctly. A 400 is pre-generation, so this
+                # compatibility retry does not spend completion tokens.
+                failure = _AttemptError(
+                    code=failure.code,
+                    retryable=True,
+                    safe_details=failure.safe_details,
+                )
+
             logger.warning(
                 "BotHub generation attempt failed: operation=%s code=%s attempt=%d/%d "
                 "retryable=%s details=%s",
@@ -214,6 +230,8 @@ class BothubProvider:
                     }
                 else:
                     payload = self._with_retry_instruction(payload)
+            elif json_mode_rejected:
+                payload = {key: value for key, value in payload.items() if key != "response_format"}
             await self._sleep(self._retry_delay(attempt))
 
         raise AssertionError("unreachable")  # pragma: no cover
