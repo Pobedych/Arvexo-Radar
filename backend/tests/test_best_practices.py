@@ -1,4 +1,7 @@
 import uuid
+from types import SimpleNamespace
+
+import pytest
 
 from app.domain.best_practices import (
     PracticeSignals,
@@ -7,6 +10,7 @@ from app.domain.best_practices import (
 )
 from app.domain.dataset_validation import parse_and_validate
 from app.main import app
+from app.services.best_practice_detection import BestPracticeDetectionService
 
 
 def _signals(**overrides) -> PracticeSignals:
@@ -73,6 +77,57 @@ def test_explicitly_poor_outcomes_reject_candidate() -> None:
 
     assert decision.is_candidate is False
     assert "positive_rating" not in decision.reasons
+
+
+@pytest.mark.asyncio
+async def test_detector_persists_practice_for_plain_repeated_prompts() -> None:
+    stored = []
+
+    class RepositoryStub:
+        async def existing_scenario_ids(self, **_kwargs):
+            return set()
+
+        async def create(self, practice):
+            stored.append(practice)
+            return practice
+
+    scenario_id = uuid.uuid4()
+    record_ids = [uuid.uuid4() for _ in range(3)]
+    scenario = SimpleNamespace(
+        id=scenario_id,
+        is_noise=False,
+        name="Сводка встречи",
+        description="Повторяющиеся запросы на подготовку краткой сводки.",
+        cluster_label=1,
+        category_ids=["summarization"],
+        share=0.3,
+        quality={"cohesion": 0.82},
+    )
+    records = [
+        SimpleNamespace(id=record_id, metadata_json={}, timestamp=None)
+        for record_id in record_ids
+    ]
+    members = {
+        scenario_id: [SimpleNamespace(record_id=record_id) for record_id in record_ids]
+    }
+    run = SimpleNamespace(
+        tenant_id=uuid.uuid4(),
+        model_provenance={"model": "gemini-2.5-flash"},
+    )
+
+    created = await BestPracticeDetectionService(RepositoryStub()).detect_for_run(
+        run=run,
+        scenarios=[scenario],
+        members_by_scenario=members,
+        records=records,
+    )
+
+    assert created == stored
+    assert len(created) == 1
+    assert created[0].title == "Сводка встречи"
+    assert created[0].detection_evidence["classifier"] == "rule-based-v2"
+    assert created[0].detection_evidence["outcome_evidence_available"] is False
+    assert "rating" in created[0].detection_evidence["missing_signals"]
 
 
 def test_legal_recommendation_targets_procurement() -> None:
