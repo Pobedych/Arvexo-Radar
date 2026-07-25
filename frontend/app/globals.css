@@ -211,6 +211,17 @@ h1, h2, h3, p, dl, dd { margin-top: 0; }
 .upload-error { margin-top: 8px; color: #b3261e; font-size: 11.5px; font-weight: 610; }
 .spin { animation: spin 900ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 900px) { .panel-grid { grid-template-columns: 1fr; } }
+.stat-list { display: grid; }
+.stat-list > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; }
+.stat-list > div + div { border-top: 1px solid var(--border-soft); }
+.stat-list strong { font-size: 11.5px; font-weight: 630; }
+.stat-list small { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: 9.5px; }
+.stat-list b { color: #315bbd; font-size: 10.5px; font-weight: 680; white-space: nowrap; }
+.insight-list { display: grid; gap: 8px; margin-top: 8px; padding: 0; list-style: none; }
+.insight-list li { font-size: 11.5px; line-height: 1.5; }
+.insight-list small { color: var(--text-tertiary); }
 
 /* Enterprise effectiveness extension */
 .executive-banner { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 34px; margin-bottom: 28px; padding: 26px 28px 30px; border: 1px solid #cbd8ef; border-radius: 16px; background: radial-gradient(circle at 95% 0, rgba(65,105,216,.12), transparent 36%), #f7faff; }

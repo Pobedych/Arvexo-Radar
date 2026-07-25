@@ -182,6 +182,7 @@ H100 в v0.1.0 не используется. Средний размер зап
 - [System Analytics](./docs/system-analytics.md)
 - [AI Best Practices и Knowledge Discovery](./docs/23-best-practices.md)
 - [Enterprise Effectiveness, TCO, ROI и Adoption](./docs/24-enterprise-effectiveness.md)
+- [Обоснование метрик для demo pitch](./docs/25-dashboard-metrics-pitch.md)
 
 Краткие entry points: [ARCHITECTURE.md](./ARCHITECTURE.md), [SECURITY.md](./SECURITY.md), [API.md](./API.md), [DEMO.md](./DEMO.md), [ROADMAP.md](./ROADMAP.md).
 

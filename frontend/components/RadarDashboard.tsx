@@ -42,11 +42,11 @@ import {
   fetchTools,
 } from "../lib/enterprise";
 import { createReport, downloadReportPdf, pollReportUntilDone } from "../lib/reports";
+import { fetchRunOverview, RunOverview } from "../lib/runs";
 import {
   AgentsView,
   DepartmentsView,
   EfficiencyView,
-  EnterpriseOverview,
   InsightsView,
   MethodologyView,
   SourcesView,
@@ -168,7 +168,7 @@ function RankedPracticeList({ title, items, metric }: { title: string; items: Be
 }
 
 function DiscoveryView({ top }: { top: Awaited<ReturnType<typeof fetchPracticeTop>> | undefined }) {
-  if (!top) return <LoadingState />;
+  if (!top) return <DataUnavailable title="Knowledge Discovery недоступен" reason="Radar API не вернул сводку по лучшим практикам." />;
   const groups = (source: Record<string, BestPractice[]>) => Object.entries(source).sort((a, b) => b[1].length - a[1].length);
   return <section><div className="page-heading discovery-heading"><div><h1>Knowledge Discovery</h1><p>Сигналы о том, где рождаются эффективные способы работы и куда их стоит переносить.</p></div><span className="live-badge"><Sparkle size={14} weight="fill" />Правила MVP</span></div><div className="discovery-rankings"><RankedPracticeList title="ТОП новых практик" items={top.new} metric="date" /><RankedPracticeList title="Быстрорастущие" items={top.fast_growing} metric="growth" /><RankedPracticeList title="Самые эффективные" items={top.most_effective} metric="impact" /></div><div className="discovery-groups"><article className="panel group-panel"><div className="group-heading"><Buildings size={19} /><div><h2>Практики по подразделениям</h2><p>Где сформировались повторяемые сценарии</p></div></div><div className="group-list">{groups(top.by_department).map(([name, items]) => <div key={name}><span>{name}</span><b>{items.length}</b><small>лучший Impact {Math.round(Math.max(...items.map((item) => item.impact_score)))}</small></div>)}</div></article><article className="panel group-panel"><div className="group-heading"><Robot size={19} /><div><h2>Практики по моделям</h2><p>Какие модели используются в успешных сценариях</p></div></div><div className="group-list">{groups(top.by_model).map(([name, items]) => <div key={name}><span>{name}</span><b>{items.length}</b><small>{items.reduce((sum, item) => sum + item.usage_count, 0)} использований</small></div>)}</div></article></div></section>;
 }
@@ -357,6 +357,126 @@ function LoadingState() {
   return <div className="loading-grid" aria-label="Загрузка"><div /><div /><div /></div>;
 }
 
+function DataUnavailable({ title, reason, onRequestUpload }: { title: string; reason?: string; onRequestUpload?: () => void }) {
+  return (
+    <div className="empty-state" role="status">
+      <WarningCircle size={28} />
+      <h2>{title}</h2>
+      <p>{reason ?? "Radar API недоступен или для этого раздела ещё нет данных."}</p>
+      {onRequestUpload && (
+        <button type="button" className="secondary-button" onClick={onRequestUpload}>
+          <Database size={16} />
+          Загрузить датасет
+        </button>
+      )}
+    </div>
+  );
+}
+
+function formatPercent(value: number) {
+  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value * 100 <= 1 ? value * 100 : value)}%`;
+}
+
+function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverview; onRequestUpload: () => void }) {
+  return (
+    <section>
+      <div className="page-heading">
+        <div>
+          <h1>Обзор запросов к ИИ-агенту</h1>
+          <p>Рассчитано по вашему загруженному датасету — {overview.total_records} запросов, прогон {overview.status}.</p>
+        </div>
+        <button type="button" className="secondary-button" onClick={onRequestUpload}>
+          <Database size={16} />
+          Загрузить другой датасет
+        </button>
+      </div>
+
+      {overview.degradations.length > 0 && (
+        <div className="demo-banner" role="status">
+          <WarningCircle size={18} weight="fill" />
+          Часть стадий анализа деградировала: {overview.degradations.map((degradation) => degradation.code).join(", ")}
+        </div>
+      )}
+
+      <div className="panel-grid">
+        <article className="panel">
+          <div className="panel-heading"><h2>Топ категорий запросов</h2><p>Доля считается от {overview.denominator} классифицированных запросов</p></div>
+          {overview.top_categories.length ? (
+            <div className="stat-list">
+              {overview.top_categories.map((category) => (
+                <div key={category.category_id}>
+                  <strong>{category.name}</strong>
+                  <b>{category.count} · {formatPercent(category.share)}</b>
+                </div>
+              ))}
+            </div>
+          ) : <p>Категории ещё не определены.</p>}
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading"><h2>Топ сценариев использования</h2><p>Устойчивые паттерны, найденные кластеризацией</p></div>
+          {overview.top_scenarios.length ? (
+            <div className="stat-list">
+              {overview.top_scenarios.map((scenario) => (
+                <div key={scenario.scenario_id}>
+                  <span><strong>{scenario.name ?? "Без названия"}</strong><small>{scenario.size} запросов · {formatPercent(scenario.share)}</small></span>
+                  <b>{scenario.is_noise ? "шум" : scenario.generation_status}</b>
+                </div>
+              ))}
+            </div>
+          ) : <p>Сценарии ещё не сгруппированы.</p>}
+        </article>
+      </div>
+
+      <div className="panel-grid">
+        <article className="panel">
+          <div className="panel-heading"><h2>Проблемы и находки</h2><p>Prompt health и security сигналы</p></div>
+          {overview.top_findings.length ? (
+            <div className="stat-list">
+              {overview.top_findings.map((finding) => (
+                <div key={finding.rule_id}>
+                  <span><strong>{finding.rule_id}</strong><small>{finding.type} · {finding.severity}</small></span>
+                  <b>{finding.count}</b>
+                </div>
+              ))}
+            </div>
+          ) : <p>Находок не обнаружено.</p>}
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading"><h2>Инсайты и рекомендации</h2><p>Evidence-backed выводы по датасету</p></div>
+          {overview.insights.length ? (
+            <ul className="insight-list">
+              {overview.insights.map((insight) => (
+                <li key={insight.insight_id}>
+                  <strong>{insight.type === "observation" ? "Observation" : "Hypothesis"}:</strong> {insight.statement}
+                  <small> (доверие {Math.round(insight.confidence * 100)}%, evidence {insight.evidence_refs.length})</small>
+                </li>
+              ))}
+            </ul>
+          ) : <p>Инсайтов пока нет.</p>}
+          {overview.recommendations.length > 0 && (
+            <ul className="insight-list">
+              {overview.recommendations.map((recommendation) => (
+                <li key={recommendation.recommendation_id}>
+                  <strong>Рекомендация:</strong> {recommendation.action} — <small>{recommendation.rationale}</small>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      </div>
+
+      {overview.limitations.length > 0 && (
+        <article className="panel">
+          <div className="panel-heading"><h2>Ограничения</h2></div>
+          <ul className="insight-list">{overview.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul>
+        </article>
+      )}
+    </section>
+  );
+}
+
 export function RadarDashboard() {
   const [view, setView] = useState<View>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -375,13 +495,19 @@ export function RadarDashboard() {
   const departmentsQuery = useQuery({ queryKey: ["enterprise-departments", filters], queryFn: () => fetchDepartments(filters) });
   const toolsQuery = useQuery({ queryKey: ["enterprise-tools", filters], queryFn: () => fetchTools(filters) });
   const methodologyQuery = useQuery({ queryKey: ["methodology"], queryFn: fetchMethodology });
+  const runOverviewQuery = useQuery({
+    queryKey: ["run-overview", currentRun?.run_id],
+    queryFn: () => fetchRunOverview(currentRun!.run_id),
+    enabled: Boolean(currentRun && currentRun.status === "completed"),
+  });
   const practiceMutation = useMutation({ mutationFn: recommendPractice });
 
   const practices = useMemo(() => (practiceQuery.data?.items ?? []).map((practice) => publishedIds.has(practice.id) ? { ...practice, status: "published" as const } : practice), [practiceQuery.data, publishedIds]);
-  // Any query silently falling back to fabricated demo data (Radar API
-  // unreachable) must stay visible as a real warning, not just a small
-  // footer note — see docs/11-dashboard.md degraded-state requirement.
-  const isDemoData = [overviewQuery, agentsQuery, departmentsQuery, toolsQuery, methodologyQuery, practiceQuery].some((query) => query.data?.demo);
+  // No fabricated demo numbers (docs/11-dashboard.md UI-AC-09): the Enterprise
+  // Analytics API (agents/departments/tools/methodology) is a separate demo
+  // subsystem, not derived from the uploaded dataset. If it's unreachable we
+  // say so plainly instead of quietly rendering fake figures as if real.
+  const enterpriseApiUnavailable = [overviewQuery, agentsQuery, departmentsQuery, toolsQuery, methodologyQuery].some((query) => query.data && query.data.data === null);
 
   const navigate = (next: View) => { setView(next); setSidebarOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const handleRecommend = async (practice: BestPractice) => {
@@ -411,6 +537,26 @@ export function RadarDashboard() {
     URL.revokeObjectURL(link.href);
   };
 
+  const renderMainView = () => {
+    if (view === "overview") {
+      if (currentRun) {
+        if (runOverviewQuery.isLoading) return <LoadingState />;
+        if (runOverviewQuery.data) return <DatasetInsightsView overview={runOverviewQuery.data} onRequestUpload={() => setUploadOpen(true)} />;
+        return <DataUnavailable title="Не удалось получить статистику по прогону" reason="Проверьте, что backend и база данных доступны, и попробуйте загрузить датасет ещё раз." onRequestUpload={() => setUploadOpen(true)} />;
+      }
+      return <DataUnavailable title="Пока нет статистики" reason="Загрузите CSV с запросами пользователей к ИИ-агенту, чтобы увидеть реальные категории, сценарии и инсайты." onRequestUpload={() => setUploadOpen(true)} />;
+    }
+    if (practiceQuery.isLoading || overviewQuery.isLoading || agentsQuery.isLoading) return <LoadingState />;
+    if (view === "efficiency") return overviewQuery.data?.data && agentsQuery.data?.data ? <EfficiencyView overview={overviewQuery.data.data} agents={agentsQuery.data.data.items} /> : <DataUnavailable title="Эффективность ИИ недоступна" reason={overviewQuery.data?.error ?? agentsQuery.data?.error} />;
+    if (view === "agents") return agentsQuery.data?.data ? <AgentsView data={agentsQuery.data.data} /> : <DataUnavailable title="Данные по AI-агентам недоступны" reason={agentsQuery.data?.error} />;
+    if (view === "departments") return departmentsQuery.data?.data ? <DepartmentsView data={departmentsQuery.data.data} /> : <DataUnavailable title="Данные по подразделениям недоступны" reason={departmentsQuery.data?.error} />;
+    if (view === "best-practices") return <><BestPracticesView practices={practices} onRecommend={handleRecommend} pendingId={pendingId} />{topQuery.data && <DiscoveryView top={topQuery.data} />}</>;
+    if (view === "insights") return overviewQuery.data?.data ? <InsightsView overview={overviewQuery.data.data} /> : <DataUnavailable title="Инсайты недоступны" reason={overviewQuery.data?.error} />;
+    if (view === "sources") return toolsQuery.data?.data && overviewQuery.data?.data ? <SourcesView tools={toolsQuery.data.data} overview={overviewQuery.data.data} /> : <DataUnavailable title="Источники данных недоступны" reason={toolsQuery.data?.error ?? overviewQuery.data?.error} />;
+    if (view === "methodology") return methodologyQuery.data?.data ? <MethodologyView initial={methodologyQuery.data.data} /> : <DataUnavailable title="Настройки методики недоступны" reason={methodologyQuery.data?.error} />;
+    return <ReportsView run={currentRun} onRequestUpload={() => setUploadOpen(true)} />;
+  };
+
   return <div className="app-shell">
     {uploadOpen && (
       <DatasetUploadModal
@@ -433,11 +579,21 @@ export function RadarDashboard() {
 
     <main className="main-content">
       <header className="topbar"><div className="topbar-left"><button type="button" className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню"><List size={20} /></button><div className="breadcrumb"><span>Рабочее пространство</span><CaretRight size={12} /><span>Июль 2026</span><CaretRight size={12} /><strong>{viewTitles[view]}</strong></div></div><div className="topbar-actions"><button type="button" className="secondary-button" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><FunnelSimple size={16} />Фильтры<span>{Object.values(filters).filter(Boolean).length}</span></button><button type="button" className="secondary-button" onClick={() => setUploadOpen(true)}><Database size={16} />Загрузить датасет</button><button type="button" className="primary-button" onClick={exportReport}><DownloadSimple size={16} />Экспорт отчёта</button><span className="user-avatar" aria-label="Профиль пользователя">U</span></div></header>
-      {filtersOpen && <section className="filter-panel enterprise-filters"><label><span>С</span><input type="date" value={filters.date_from ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_from: event.target.value }))}/></label><label><span>По</span><input type="date" value={filters.date_to ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_to: event.target.value }))}/></label><label><span>Подразделение</span><select value={filters.department ?? ""} onChange={(event) => setFilters((old) => ({ ...old, department: event.target.value }))}><option value="">Все</option><option>Юридический отдел</option><option>Финансы</option><option>Продажи</option><option>HR</option><option>ИТ</option></select></label><label><span>Роль</span><select value={filters.role ?? ""} onChange={(event) => setFilters((old) => ({ ...old, role: event.target.value }))}><option value="">Все</option><option>Юрист</option><option>Аналитик</option><option>Менеджер по продажам</option><option>HR-партнёр</option></select></label><label><span>Пользователь (hash)</span><input value={filters.user ?? ""} onChange={(event) => setFilters((old) => ({ ...old, user: event.target.value }))} placeholder="user_id_hash" /></label><label><span>Агент</span><select value={filters.agent ?? ""} onChange={(event) => setFilters((old) => ({ ...old, agent: event.target.value }))}><option value="">Все</option>{agentsQuery.data?.data.items.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></label><label><span>Модель</span><select value={filters.model ?? ""} onChange={(event) => setFilters((old) => ({ ...old, model: event.target.value }))}><option value="">Все</option><option>GigaChat Pro</option><option>YandexGPT 5 Pro</option><option>Corporate LLM 70B</option></select></label><label><span>Сценарий</span><select value={filters.scenario ?? ""} onChange={(event) => setFilters((old) => ({ ...old, scenario: event.target.value }))}><option value="">Все</option><option value="contract-review">Проверка договоров</option><option value="management-report">Управленческий отчёт</option><option value="crm-followup">Follow-up в CRM</option></select></label><label><span>Инструмент</span><select value={filters.tool ?? ""} onChange={(event) => setFilters((old) => ({ ...old, tool: event.target.value }))}><option value="">Все</option><option>Корпоративные документы</option><option>CRM</option><option>Почта</option><option>Браузер</option></select></label><button type="button" className="text-button" onClick={() => setFiltersOpen(false)}>Готово</button><button type="button" className="text-button muted" onClick={() => setFilters({ date_from: "2026-07-01", date_to: "2026-08-01" })}>Сбросить</button></section>}
+      {filtersOpen && <section className="filter-panel enterprise-filters"><label><span>С</span><input type="date" value={filters.date_from ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_from: event.target.value }))}/></label><label><span>По</span><input type="date" value={filters.date_to ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_to: event.target.value }))}/></label><label><span>Подразделение</span><select value={filters.department ?? ""} onChange={(event) => setFilters((old) => ({ ...old, department: event.target.value }))}><option value="">Все</option><option>Юридический отдел</option><option>Финансы</option><option>Продажи</option><option>HR</option><option>ИТ</option></select></label><label><span>Роль</span><select value={filters.role ?? ""} onChange={(event) => setFilters((old) => ({ ...old, role: event.target.value }))}><option value="">Все</option><option>Юрист</option><option>Аналитик</option><option>Менеджер по продажам</option><option>HR-партнёр</option></select></label><label><span>Пользователь (hash)</span><input value={filters.user ?? ""} onChange={(event) => setFilters((old) => ({ ...old, user: event.target.value }))} placeholder="user_id_hash" /></label><label><span>Агент</span><select value={filters.agent ?? ""} onChange={(event) => setFilters((old) => ({ ...old, agent: event.target.value }))}><option value="">Все</option>{agentsQuery.data?.data?.items.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></label><label><span>Модель</span><select value={filters.model ?? ""} onChange={(event) => setFilters((old) => ({ ...old, model: event.target.value }))}><option value="">Все</option><option>GigaChat Pro</option><option>YandexGPT 5 Pro</option><option>Corporate LLM 70B</option></select></label><label><span>Сценарий</span><select value={filters.scenario ?? ""} onChange={(event) => setFilters((old) => ({ ...old, scenario: event.target.value }))}><option value="">Все</option><option value="contract-review">Проверка договоров</option><option value="management-report">Управленческий отчёт</option><option value="crm-followup">Follow-up в CRM</option></select></label><label><span>Инструмент</span><select value={filters.tool ?? ""} onChange={(event) => setFilters((old) => ({ ...old, tool: event.target.value }))}><option value="">Все</option><option>Корпоративные документы</option><option>CRM</option><option>Почта</option><option>Браузер</option></select></label><button type="button" className="text-button" onClick={() => setFiltersOpen(false)}>Готово</button><button type="button" className="text-button muted" onClick={() => setFilters({ date_from: "2026-07-01", date_to: "2026-08-01" })}>Сбросить</button></section>}
       <div className="page-content">
-        {isDemoData && <div className="demo-banner" role="status"><WarningCircle size={18} weight="fill" />Radar API недоступен — показаны demo-данные, они не отражают реальное использование ИИ в организации.</div>}
-        {practiceQuery.isLoading || overviewQuery.isLoading || agentsQuery.isLoading ? <LoadingState /> : view === "overview" && overviewQuery.data ? <EnterpriseOverview data={overviewQuery.data.data} practices={practices} onOpenPractices={() => navigate("best-practices")} /> : view === "efficiency" && overviewQuery.data && agentsQuery.data ? <EfficiencyView overview={overviewQuery.data.data} agents={agentsQuery.data.data.items} /> : view === "agents" && agentsQuery.data ? <AgentsView data={agentsQuery.data.data} /> : view === "departments" && departmentsQuery.data ? <DepartmentsView data={departmentsQuery.data.data} /> : view === "best-practices" ? <><BestPracticesView practices={practices} onRecommend={handleRecommend} pendingId={pendingId} />{topQuery.data && <DiscoveryView top={topQuery.data} />}</> : view === "insights" && overviewQuery.data ? <InsightsView overview={overviewQuery.data.data} /> : view === "sources" && toolsQuery.data && overviewQuery.data ? <SourcesView tools={toolsQuery.data.data} overview={overviewQuery.data.data} /> : view === "methodology" && methodologyQuery.data ? <MethodologyView initial={methodologyQuery.data.data} /> : <ReportsView run={currentRun} onRequestUpload={() => setUploadOpen(true)} />}
-        <footer className="page-footer"><span>Период: июль 2026 · методика v1</span><span>{isDemoData ? "Demo/Mock — явно помечено" : "Данные Radar API"} | Подразделений 6 | Сценариев 4 | AI-агентов 4</span></footer>
+        {enterpriseApiUnavailable && view !== "overview" && view !== "reports" && (
+          <div className="demo-banner" role="status">
+            <WarningCircle size={18} weight="fill" />
+            Enterprise Analytics API недоступен для этого раздела — показанные данные могут быть неполными.
+          </div>
+        )}
+        {renderMainView()}
+        {currentRun && runOverviewQuery.data && (
+          <footer className="page-footer">
+            <span>Прогон {currentRun.run_id.slice(0, 8)} · статус {currentRun.status}</span>
+            <span>Записей {runOverviewQuery.data.total_records} · Категорий {runOverviewQuery.data.top_categories.length} · Сценариев {runOverviewQuery.data.top_scenarios.length}</span>
+          </footer>
+        )}
       </div>
     </main>
     {toast && <div className="toast" role="status"><CheckCircle size={18} weight="fill" />{toast}</div>}
