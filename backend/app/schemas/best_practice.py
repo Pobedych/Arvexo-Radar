@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.enums import BestPracticeStatus
 
@@ -17,7 +17,10 @@ class BestPracticeResponse(BaseModel):
     department: str = "Не определено"
     department_origin: str | None = None
     scenario: str = "Не определено"
-    scenario_id: UUID | str | None = None
+    scenario_id: UUID | str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("scenario_id", "source_scenario_id"),
+    )
     created_at: datetime
     detected_at: datetime
     status: BestPracticeStatus

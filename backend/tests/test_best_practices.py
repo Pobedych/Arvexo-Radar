@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -10,6 +11,7 @@ from app.domain.best_practices import (
 )
 from app.domain.dataset_validation import parse_and_validate
 from app.main import app
+from app.schemas.best_practice import BestPracticeResponse
 from app.services.best_practice_detection import BestPracticeDetectionService
 
 
@@ -128,6 +130,12 @@ async def test_detector_persists_practice_for_plain_repeated_prompts() -> None:
     assert created[0].detection_evidence["classifier"] == "rule-based-v2"
     assert created[0].detection_evidence["outcome_evidence_available"] is False
     assert "rating" in created[0].detection_evidence["missing_signals"]
+    # SQLAlchemy applies these defaults during a real repository flush.
+    created[0].created_at = datetime.now(UTC)
+    created[0].estimated_money_saved = 0
+    created[0].recommended_departments = []
+    response = BestPracticeResponse.model_validate(created[0])
+    assert response.scenario_id == scenario_id
 
 
 def test_legal_recommendation_targets_procurement() -> None:
