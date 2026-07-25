@@ -63,14 +63,28 @@ docker compose -f docker-compose.prod.yml exec -T api alembic upgrade head
 docker image prune -f
 ```
 
-После деплоя отдельный шаг дёргает `curl http://localhost:8000/api/v1/health` и `/ready` на сервере — если сервис не поднялся, workflow падает красным сразу, а не молча оставляет сервер в битом состоянии.
+После деплоя отдельный шаг читает `API_HOST_PORT` из `.env` на сервере и дёргает `curl http://127.0.0.1:${API_HOST_PORT}/api/v1/health` и `/ready` — если сервис не поднялся, workflow падает красным сразу, а не молча оставляет сервер в битом состоянии. Проверяется именно loopback-порт контейнера, а не публичный `https://radar.arvexo.ru` — так smoke test работает и на свежем сервере, где nginx/DNS/TLS ещё не настроены.
 
 `docker-compose.prod.yml` — самостоятельный (не overlay поверх dev `docker-compose.yml`): Compose-семантика слияния списков (`ports`, `volumes`) между файлами зависит от YAML-тегов `!reset`/`!override`, которые требуют относительно новой Compose CLI — не факт, что она есть на сервере. Самостоятельный файл предсказуем без кросс-референсов. Отличия от dev-версии:
 
 - образы вместо `build:`;
 - без bind-mount исходников и `--reload`;
 - `db` не публикует порт `5432` наружу (docs/16-security.md: "DB не публикуется в production profile");
+- `api`/`web` публикуются только на `127.0.0.1:${API_HOST_PORT}`/`127.0.0.1:${WEB_HOST_PORT}` (по умолчанию `38000`/`38080` — 80/443/3000/8000 на сервере уже заняты nginx и другими сервисами), наружу их отдаёт nginx — см. `deploy/nginx/radar.arvexo.ru.conf`;
 - `restart: unless-stopped` на всех сервисах.
+
+### 5.1. nginx и домен `radar.arvexo.ru`
+
+`deploy/nginx/radar.arvexo.ru.conf` — reverse proxy с `/api/` на `API_HOST_PORT` и `/` на `WEB_HOST_PORT`. Ставится один раз вручную на сервере (не через CD — конфигурация nginx вне scope деплоя приложения):
+
+```bash
+sudo cp deploy/nginx/radar.arvexo.ru.conf /etc/nginx/sites-available/radar.arvexo.ru
+sudo ln -s /etc/nginx/sites-available/radar.arvexo.ru /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d radar.arvexo.ru   # TLS, переписывает конфиг под HTTPS
+```
+
+Если порты в `.env` (`API_HOST_PORT`/`WEB_HOST_PORT`) отличаются от дефолтных `38000`/`38080`, поправить `set $api_port`/`set $web_port` в конфиге. После этого `NEXT_PUBLIC_API_BASE_URL=https://radar.arvexo.ru/api/v1` и `ARVEXO_CORS_ORIGINS=["https://radar.arvexo.ru"]` в `.env` (см. `.env.example`).
 
 ## 6. Требуемая конфигурация
 
@@ -82,19 +96,27 @@ docker image prune -f
 | `DEPLOY_USER` | SSH-пользователь |
 | `DEPLOY_SSH_KEY` | Приватный SSH-ключ (PEM), публичная часть — в `~/.ssh/authorized_keys` на сервере |
 | `DEPLOY_PORT` | SSH-порт (опционально, по умолчанию 22) |
-| `DEPLOY_PATH` | Путь на сервере, где лежат `docker-compose.prod.yml` и `.env` |
+| `DEPLOY_PATH` | Путь на сервере — git clone этого репозитория (не просто папка с файлами, см. 6.2) |
 
 `GITHUB_TOKEN` для входа в GHCR передаётся автоматически Actions — отдельный секрет не нужен ни для сборки, ни для `docker login` на сервере (используется как pull-токен через SSH-сессию, никогда не хранится на сервере в файле).
 
 ### 6.2. Сервер (заполняется вручную один раз)
 
+`DEPLOY_PATH` — полноценный git clone репозитория, а не просто скопированный `docker-compose.prod.yml`: деплой-скрипт делает `git fetch && git reset --hard origin/main` перед `docker compose ... pull/up`, чтобы файл всегда соответствовал `main` без отдельного шага копирования. `.env` не отслеживается git (`.gitignore`), поэтому `git reset --hard` его не трогает.
+
 ```bash
-mkdir -p /opt/arvexo-radar && cd /opt/arvexo-radar
-# скопировать docker-compose.prod.yml из репозитория
+ssh-keygen -t ed25519 -f deploy_key -N "" -C "github-actions-arvexo-radar"
+# приватный ключ -> secret DEPLOY_SSH_KEY, публичный -> authorized_keys на сервере
+cat deploy_key.pub >> ~/.ssh/authorized_keys   # на сервере, под DEPLOY_USER
+
+git clone <repo-url> /var/www/Arvexo-Radar   # или любой путь = DEPLOY_PATH
+cd /var/www/Arvexo-Radar
 cp .env.example .env   # затем заполнить реальными значениями
 ```
 
-`.env` на сервере никогда не коммитится (docs/16-security.md SEC-09) и содержит как минимум `POSTGRES_PASSWORD`, `ARVEXO_DATABASE_URL` (host `db`, не `localhost`), выбранный `ARVEXO_LLM_PROVIDER_MODE` и, если используется BotHub, `ARVEXO_BOTHUB_API_KEY`.
+`DEPLOY_USER` должен состоять в группе `docker` (`usermod -aG docker <user>`), иначе `docker compose` в SSH-сессии упадёт по правам.
+
+`.env` на сервере никогда не коммитится (docs/16-security.md SEC-09) и содержит как минимум `POSTGRES_PASSWORD`, `ARVEXO_DATABASE_URL` (host `db`, не `localhost`), `ARVEXO_ANALYTICS_USER_HASH_SALT` (длинный случайный секрет), выбранный `ARVEXO_LLM_PROVIDER_MODE` и, если не `mock`, ключи соответствующего провайдера.
 
 ## 7. Версионирование образов и rollback
 

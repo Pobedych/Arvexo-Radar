@@ -40,7 +40,11 @@ services:
     volumes:
       - controlled_storage:/data/storage
     ports:
-      - "8000:8000"
+      # Loopback-only: nginx (already on 80/443) reverse-proxies
+      # radar.arvexo.ru here, the app is never reachable on this port
+      # directly from outside the server. Override API_HOST_PORT in .env
+      # if it collides with something else already bound on the host.
+      - "127.0.0.1:${API_HOST_PORT:-38000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -63,7 +67,9 @@ services:
     command: npm run start
     env_file: .env
     ports:
-      - "3000:3000"
+      # Same loopback-only pattern as api — nginx proxies radar.arvexo.ru
+      # here; override WEB_HOST_PORT in .env if it collides.
+      - "127.0.0.1:${WEB_HOST_PORT:-38080}:3000"
     depends_on:
       - api
     restart: unless-stopped
