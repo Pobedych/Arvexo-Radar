@@ -97,7 +97,7 @@ class BothubProvider:
             base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
         )
         self._api_key = secret.get_secret_value().strip()
-        self._model = settings.bothub_model
+        self._model = settings.bothub_structured_model
         self._timeout = settings.llm_timeout_seconds
         self._max_retries = settings.llm_max_retries
         self._max_output_tokens = settings.llm_max_output_tokens

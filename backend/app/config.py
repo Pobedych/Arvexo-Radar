@@ -32,13 +32,12 @@ class Settings(BaseSettings):
     bothub_api_key: SecretStr | None = None
     bothub_base_url: str = "https://openai.bothub.chat/v1"
     bothub_model: str = "gemini-2.5-flash"
+    # Short structured enrichment does not need a reasoning-heavy model.
+    # Flash-Lite is substantially cheaper and reliably returns bounded JSON.
+    bothub_structured_model: str = "gemini-2.5-flash-lite"
     llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     llm_max_retries: int = Field(default=1, ge=0, le=5)
-    # Gemini 2.5 Flash spends a substantial part of this budget on internal
-    # reasoning. Production traces showed that 640 and even a 1280-token retry
-    # could end with finish_reason="length". The cap is not prepaid: allowing
-    # 2000 from the first attempt avoids paying for a doomed truncated attempt.
-    llm_max_output_tokens: int = Field(default=2000, ge=128, le=4096)
+    llm_max_output_tokens: int = Field(default=640, ge=128, le=4096)
     llm_max_samples: int = Field(default=3, ge=1, le=5)
     llm_max_sample_chars: int = Field(default=400, ge=100, le=2000)
 
