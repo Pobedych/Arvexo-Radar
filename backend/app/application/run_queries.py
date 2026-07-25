@@ -7,7 +7,9 @@ Kept out of the routers so routers stay free of aggregation logic
 
 from __future__ import annotations
 
+import json
 import uuid
+from collections import Counter
 
 from app.domain.errors import RunStateError
 from app.domain.taxonomy import CATEGORY_BY_ID
@@ -16,6 +18,41 @@ from app.repositories.analysis_repository import AnalysisRepository
 
 MAX_SAMPLES = 5
 MAX_FINDING_EXAMPLES = 3
+SEGMENT_FIELDS = ("team", "direction", "agent_id", "language")
+
+
+def _model_from_record_text(masked_text: str | None) -> str | None:
+    if not masked_text:
+        return None
+    try:
+        payload = json.loads(masked_text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    model = payload.get("model") if isinstance(payload, dict) else None
+    return str(model).strip() if model else None
+
+
+def _distribution(counter: Counter[str], total: int) -> list[dict]:
+    denominator = total or 1
+    return [
+        {"key": key, "label": key, "count": count, "share": count / denominator}
+        for key, count in sorted(counter.items())
+    ]
+
+
+def _segment_distribution(counter: Counter[str], total: int) -> list[dict]:
+    denominator = total or 1
+    return [
+        {
+            "value": value,
+            "count": count,
+            "share": count / denominator,
+            "is_missing": value == "__missing__",
+        }
+        for value, count in sorted(
+            counter.items(), key=lambda item: (item[0] == "__missing__", -item[1], item[0])
+        )
+    ]
 
 
 class RunQueries:
@@ -175,6 +212,7 @@ class RunQueries:
         scenarios = [s for s in await self.scenario_summaries(run.id) if not s["is_noise"]]
         findings = await self.finding_summaries(run.id)
         insights, recommendations = await self.insights_and_recommendations(run.id)
+        dashboard_metrics = await self.dashboard_metrics(run, total_records=total_records)
 
         trend_available = bool(run.config_snapshot.get("trend_available"))
         trend_reason = run.config_snapshot.get("trend_unavailable_reason")
@@ -195,8 +233,104 @@ class RunQueries:
             "insights": insights,
             "recommendations": recommendations,
             "trend": {"available": trend_available, "reason": trend_reason},
+            **dashboard_metrics,
             "degradations": run.degradations,
             "limitations": limitations,
+        }
+
+    async def dashboard_metrics(self, run: AnalysisRun, *, total_records: int) -> dict:
+        version = await self._repo.get_dataset_version(run.dataset_version_id)
+        records = await self._repo.get_analyzable_records(run.dataset_version_id)
+        findings = await self._repo.get_findings(run.id)
+
+        validation = version.validation_summary if version is not None else {}
+        accepted = int(validation.get("accepted", 0))
+        accepted_with_warnings = int(validation.get("accepted_with_warnings", 0))
+        rejected = int(validation.get("rejected", 0))
+
+        warning_counts: Counter[str] = Counter()
+        date_counts: Counter[str] = Counter()
+        hour_counts: Counter[str] = Counter()
+        segment_counts = {field: Counter() for field in (*SEGMENT_FIELDS, "model")}
+        present_counts: Counter[str] = Counter()
+
+        for record in records:
+            warning_counts.update(record.warnings or [])
+
+            if record.timestamp is not None:
+                date_counts[record.timestamp.date().isoformat()] += 1
+                bucket_start = (record.timestamp.hour // 3) * 3
+                bucket_key = f"{bucket_start:02d}:00"
+                hour_counts[bucket_key] += 1
+
+            metadata = record.metadata_json or {}
+            for field in SEGMENT_FIELDS:
+                value = str(metadata.get(field) or "").strip()
+                segment_counts[field][value or "__missing__"] += 1
+                if value:
+                    present_counts[field] += 1
+
+            model = str(metadata.get("model") or "").strip() or _model_from_record_text(
+                record.masked_text
+            )
+            segment_counts["model"][model or "__missing__"] += 1
+            if model:
+                present_counts["model"] += 1
+
+        for field in (*SEGMENT_FIELDS, "model"):
+            missing = max(total_records - sum(segment_counts[field].values()), 0)
+            if missing:
+                segment_counts[field]["__missing__"] += missing
+
+        severity_counts = Counter(f.severity for f in findings)
+        type_counts = Counter(f.type for f in findings)
+        affected_record_ids = {f.record_id for f in findings if f.record_id is not None}
+        valid_timestamps = sum(date_counts.values())
+
+        quality_fields = []
+        for field in (*SEGMENT_FIELDS, "model"):
+            present = present_counts[field]
+            missing = max(total_records - present, 0)
+            quality_fields.append(
+                {
+                    "field": field,
+                    "present": present,
+                    "missing": missing,
+                    "completeness": present / (total_records or 1),
+                }
+            )
+
+        return {
+            "data_quality": {
+                "accepted": accepted,
+                "accepted_with_warnings": accepted_with_warnings,
+                "rejected": rejected,
+                "total_rows": accepted + accepted_with_warnings + rejected,
+                "warning_counts": dict(sorted(warning_counts.items())),
+                "fields": quality_fields,
+            },
+            "activity": {
+                "valid_timestamp_records": valid_timestamps,
+                "missing_timestamp_records": max(total_records - valid_timestamps, 0),
+                "by_date": _distribution(date_counts, valid_timestamps),
+                "by_hour": _distribution(hour_counts, valid_timestamps),
+            },
+            "segments": {
+                field: _segment_distribution(counter, total_records)
+                for field, counter in segment_counts.items()
+            },
+            "risk_summary": {
+                "total_findings": len(findings),
+                "affected_records": len(affected_record_ids),
+                "affected_share": len(affected_record_ids) / (total_records or 1),
+                "by_severity": [
+                    {"key": key, "count": count}
+                    for key, count in sorted(severity_counts.items())
+                ],
+                "by_type": [
+                    {"key": key, "count": count} for key, count in sorted(type_counts.items())
+                ],
+            },
         }
 
     async def finding_summaries(self, run_id: uuid.UUID, *, finding_type: str | None = None) -> list[dict]:

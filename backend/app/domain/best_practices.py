@@ -20,12 +20,21 @@ class PracticeSignals:
     models: tuple[str, ...]
     user_count: int
     usage_count: int
+    scenario_share: float
     average_rating: float | None
+    rating_count: int
     time_saved_hours: float
+    time_saved_count: int
     success_rate: float
     error_rate: float
+    success_count: int
     growth_rate: float
+    timestamp_count: int
     scenario_cohesion: float
+
+    @property
+    def has_outcome_evidence(self) -> bool:
+        return self.rating_count > 0 or self.time_saved_count > 0 or self.success_count > 0
 
 
 @dataclass(frozen=True)
@@ -34,6 +43,7 @@ class DetectionDecision:
     impact_score: float
     confidence_score: float
     reasons: tuple[str, ...]
+    missing_signals: tuple[str, ...] = ()
 
 
 class BestPracticeClassifier(Protocol):
@@ -43,80 +53,89 @@ class BestPracticeClassifier(Protocol):
 
 
 class RuleBasedBestPracticeClassifier:
-    """Transparent MVP classifier based only on aggregate usage signals."""
+    """Transparent classifier based only on aggregate usage signals.
+
+    Business outcome columns are optional in an uploaded dataset. Their
+    absence lowers confidence but must not make repeated, cohesive scenarios
+    impossible to discover. Explicitly poor outcome values still reject a
+    candidate.
+    """
 
     def __init__(
         self,
         *,
-        min_impact_score: float = 70.0,
-        min_usage_count: int = 8,
-        min_user_count: int = 3,
-        min_success_rate: float = 0.80,
-        min_average_rating: float = 4.0,
-        max_error_rate: float = 0.20,
-        min_growth_rate: float = 0.05,
-        min_time_saved_hours: float = 1.0,
+        min_impact_score: float = 45.0,
+        min_usage_count: int = 3,
+        min_scenario_share: float = 0.05,
+        min_scenario_cohesion: float = 0.45,
+        min_success_rate: float = 0.65,
+        min_average_rating: float = 3.5,
+        max_error_rate: float = 0.35,
     ) -> None:
         self.min_impact_score = min_impact_score
         self.min_usage_count = min_usage_count
-        self.min_user_count = min_user_count
+        self.min_scenario_share = min_scenario_share
+        self.min_scenario_cohesion = min_scenario_cohesion
         self.min_success_rate = min_success_rate
         self.min_average_rating = min_average_rating
         self.max_error_rate = max_error_rate
-        self.min_growth_rate = min_growth_rate
-        self.min_time_saved_hours = min_time_saved_hours
 
     def calculate_impact_score(self, signals: PracticeSignals) -> float:
-        user_score = _clamp(signals.user_count / 20)
-        frequency_score = _clamp(signals.usage_count / 50)
-        rating_score = (
-            _clamp((signals.average_rating - 1) / 4)
-            if signals.average_rating is not None
-            else 0.5
-        )
-        time_score = _clamp(signals.time_saved_hours / 40)
-        success_score = _clamp(signals.success_rate)
+        components: list[tuple[float, float]] = [
+            (_clamp(signals.usage_count / 8), 0.25),
+            (_clamp(signals.scenario_share / 0.25), 0.20),
+            (_clamp(signals.scenario_cohesion), 0.20),
+        ]
+        if signals.user_count > 0:
+            components.append((_clamp(signals.user_count / 5), 0.10))
+        if signals.rating_count > 0 and signals.average_rating is not None:
+            components.append((_clamp((signals.average_rating - 1) / 4), 0.10))
+        if signals.time_saved_count > 0:
+            components.append((_clamp(signals.time_saved_hours / 5), 0.10))
+        if signals.success_count > 0:
+            components.append((_clamp(signals.success_rate), 0.10))
+        if signals.timestamp_count >= 4:
+            components.append((_clamp((signals.growth_rate + 0.25) / 0.75), 0.05))
 
-        weighted = (
-            user_score * 0.20
-            + frequency_score * 0.20
-            + rating_score * 0.20
-            + time_score * 0.20
-            + success_score * 0.20
-        )
+        total_weight = sum(weight for _, weight in components)
+        weighted = sum(score * weight for score, weight in components) / total_weight
         return round(weighted * 100, 1)
 
     def evaluate(self, signals: PracticeSignals) -> DetectionDecision:
         impact_score = self.calculate_impact_score(signals)
-        checks = {
+        checks: dict[str, bool] = {
             "high_impact": impact_score >= self.min_impact_score,
-            "frequent_usage": signals.usage_count >= self.min_usage_count,
-            "multi_user_adoption": signals.user_count >= self.min_user_count,
-            "high_success": signals.success_rate >= self.min_success_rate,
-            "low_error_rate": signals.error_rate <= self.max_error_rate,
-            "positive_rating": (
+            "repeated_usage": signals.usage_count >= self.min_usage_count,
+            "meaningful_share": signals.scenario_share >= self.min_scenario_share,
+            "cohesive_scenario": signals.scenario_cohesion >= self.min_scenario_cohesion,
+        }
+        if signals.rating_count > 0:
+            checks["positive_rating"] = bool(
                 signals.average_rating is not None
                 and signals.average_rating >= self.min_average_rating
-            ),
-            "growing_usage": signals.growth_rate >= self.min_growth_rate,
-            "confirmed_time_saving": signals.time_saved_hours >= self.min_time_saved_hours,
-        }
-        completeness = sum(
-            (
-                bool(signals.departments),
-                bool(signals.models),
-                signals.user_count > 0,
-                signals.average_rating is not None,
-                signals.time_saved_hours > 0,
-                signals.usage_count > 0,
             )
-        ) / 6
+        if signals.success_count > 0:
+            checks["high_success"] = signals.success_rate >= self.min_success_rate
+            checks["low_error_rate"] = signals.error_rate <= self.max_error_rate
+
+        missing_signals = tuple(
+            name
+            for name, missing in (
+                ("users", signals.user_count == 0),
+                ("rating", signals.rating_count == 0),
+                ("time_saved", signals.time_saved_count == 0),
+                ("success", signals.success_count == 0),
+                ("trend", signals.timestamp_count < 4),
+            )
+            if missing
+        )
+        optional_completeness = 1 - len(missing_signals) / 5
         confidence = round(
             100
             * _clamp(
-                completeness * 0.55
-                + _clamp(signals.scenario_cohesion) * 0.30
-                + min(signals.usage_count / 30, 1) * 0.15
+                _clamp(signals.scenario_cohesion) * 0.40
+                + min(signals.usage_count / 12, 1) * 0.25
+                + optional_completeness * 0.35
             ),
             1,
         )
@@ -125,10 +144,17 @@ class RuleBasedBestPracticeClassifier:
             impact_score=impact_score,
             confidence_score=confidence,
             reasons=tuple(name for name, passed in checks.items() if passed),
+            missing_signals=missing_signals,
         )
 
 
 def build_recommendation(signals: PracticeSignals) -> str:
+    if not signals.has_outcome_evidence:
+        return (
+            "Radar обнаружил устойчивый повторяемый сценарий. "
+            "Проверьте качество результата и экономию времени на пилоте, "
+            "после подтверждения масштабируйте практику."
+        )
     if len(signals.departments) > 1:
         return "Практика уже распространяется между подразделениями. Рекомендуется масштабирование."
 

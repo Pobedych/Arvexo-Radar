@@ -118,9 +118,12 @@ class BestPracticeDetectionService:
                 departments=list(signals.departments),
                 models=list(signals.models),
                 detection_evidence={
-                    "classifier": "rule-based-v1",
+                    "classifier": "rule-based-v2",
                     "matched_rules": list(decision.reasons),
+                    "missing_signals": list(decision.missing_signals),
                     "scenario_cohesion": signals.scenario_cohesion,
+                    "scenario_share": signals.scenario_share,
+                    "outcome_evidence_available": signals.has_outcome_evidence,
                 },
             )
             await self._repository.create(practice)
@@ -177,11 +180,11 @@ class BestPracticeDetectionService:
             if (rating := _number(record.metadata_json.get("rating"))) is not None
             and 1 <= rating <= 5
         ]
-        time_saved_minutes = sum(
+        time_saved_values = [
             max(value, 0)
             for record in records
             if (value := _number(record.metadata_json.get("time_saved_minutes"))) is not None
-        )
+        ]
         success_values: list[bool] = []
         error_values: list[bool] = []
         for record in records:
@@ -205,7 +208,7 @@ class BestPracticeDetectionService:
         error_rate = (
             sum(1 for error in error_values if error) / len(error_values)
             if error_values
-            else 1.0
+            else 0.0
         )
         return PracticeSignals(
             scenario_id=scenario.id,
@@ -215,10 +218,15 @@ class BestPracticeDetectionService:
             models=tuple(models),
             user_count=len(users),
             usage_count=len(records),
+            scenario_share=float(scenario.share),
             average_rating=average_rating,
-            time_saved_hours=time_saved_minutes / 60,
+            rating_count=len(ratings),
+            time_saved_hours=sum(time_saved_values) / 60,
+            time_saved_count=len(time_saved_values),
             success_rate=success_rate,
             error_rate=error_rate,
+            success_count=max(len(success_values), len(error_values)),
             growth_rate=_growth_rate(records),
+            timestamp_count=sum(record.timestamp is not None for record in records),
             scenario_cohesion=float(scenario.quality.get("cohesion", 0.0)),
         )

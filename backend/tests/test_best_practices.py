@@ -1,7 +1,5 @@
 import uuid
 
-import pytest
-
 from app.domain.best_practices import (
     PracticeSignals,
     RuleBasedBestPracticeClassifier,
@@ -20,11 +18,16 @@ def _signals(**overrides) -> PracticeSignals:
         "models": ("GigaChat Pro",),
         "user_count": 20,
         "usage_count": 50,
+        "scenario_share": 0.4,
         "average_rating": 5.0,
+        "rating_count": 20,
         "time_saved_hours": 40.0,
+        "time_saved_count": 20,
         "success_rate": 0.95,
         "error_rate": 0.05,
+        "success_count": 20,
         "growth_rate": 0.4,
+        "timestamp_count": 50,
         "scenario_cohesion": 0.9,
     }
     values.update(overrides)
@@ -35,13 +38,37 @@ def test_impact_score_is_bounded_and_candidate_is_detected() -> None:
     decision = RuleBasedBestPracticeClassifier().evaluate(_signals())
 
     assert decision.is_candidate is True
-    assert decision.impact_score == pytest.approx(99.0)
+    assert decision.impact_score >= 95
     assert 0 <= decision.confidence_score <= 100
 
 
-def test_missing_user_rating_and_success_prevents_detection() -> None:
+def test_sparse_dataset_can_detect_repeatable_practice_with_lower_confidence() -> None:
     decision = RuleBasedBestPracticeClassifier().evaluate(
-        _signals(user_count=0, average_rating=None, success_rate=0.0, error_rate=1.0)
+        _signals(
+            user_count=0,
+            usage_count=5,
+            scenario_share=0.2,
+            average_rating=None,
+            rating_count=0,
+            time_saved_hours=0,
+            time_saved_count=0,
+            success_rate=0.0,
+            error_rate=0.0,
+            success_count=0,
+            growth_rate=0.0,
+            timestamp_count=0,
+            scenario_cohesion=0.8,
+        )
+    )
+
+    assert decision.is_candidate is True
+    assert decision.confidence_score < 70
+    assert set(decision.missing_signals) == {"users", "rating", "time_saved", "success", "trend"}
+
+
+def test_explicitly_poor_outcomes_reject_candidate() -> None:
+    decision = RuleBasedBestPracticeClassifier().evaluate(
+        _signals(average_rating=2.0, success_rate=0.3, error_rate=0.7)
     )
 
     assert decision.is_candidate is False

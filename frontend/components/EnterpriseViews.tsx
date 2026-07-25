@@ -834,22 +834,22 @@ export function SourcesView({
 }) {
   const sources = [
     {
-      name: "LLM Gateway",
+      name: "LLM-шлюз",
       status: "Синхронизирован",
       kind: "Факт",
-      details: "Запросы, пользователи, модели, токены, latency",
+      details: "Запросы, пользователи, модели, токены и задержка",
     },
     {
       name: "FinOps / договоры",
       status: "Синхронизирован",
       kind: "Смешанные",
-      details: "Тарифы, инфраструктура, подписки и support",
+      details: "Тарифы, инфраструктура, подписки и поддержка",
     },
     {
-      name: "Scenario Benchmark",
+      name: "Бенчмарки сценариев",
       status: "Требует ревью",
       kind: "Факт + оценка",
-      details: "Baseline, actual time, sample size, confidence",
+      details: "Базовое и фактическое время, выборка и достоверность",
     },
     {
       name: "HR-справочник",
@@ -867,6 +867,12 @@ export function SourcesView({
         </div>
         <span className="count-badge">
           {Math.round(overview.provenance.estimated_share * 100)}% оценки
+        </span>
+      </div>
+      <div className="context-banner" role="note">
+        <Info size={18} weight="fill" />
+        <span>
+          <strong>Корпоративный контекст.</strong> Показатели ниже объединяют фактические, оценочные и демонстрационные источники Radar и не рассчитываются только по текущему загруженному CSV.
         </span>
       </div>
       <div className="source-grid">

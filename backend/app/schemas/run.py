@@ -124,6 +124,56 @@ class TrendBlock(BaseModel):
     reason: str | None
 
 
+class DataQualityField(BaseModel):
+    field: str
+    present: int
+    missing: int
+    completeness: float
+
+
+class DataQualityBlock(BaseModel):
+    accepted: int
+    accepted_with_warnings: int
+    rejected: int
+    total_rows: int
+    warning_counts: dict[str, int]
+    fields: list[DataQualityField]
+
+
+class DistributionPoint(BaseModel):
+    key: str
+    label: str
+    count: int
+    share: float
+
+
+class ActivityBlock(BaseModel):
+    valid_timestamp_records: int
+    missing_timestamp_records: int
+    by_date: list[DistributionPoint]
+    by_hour: list[DistributionPoint]
+
+
+class SegmentPoint(BaseModel):
+    value: str
+    count: int
+    share: float
+    is_missing: bool = False
+
+
+class RiskBreakdown(BaseModel):
+    key: str
+    count: int
+
+
+class RiskSummary(BaseModel):
+    total_findings: int
+    affected_records: int
+    affected_share: float
+    by_severity: list[RiskBreakdown]
+    by_type: list[RiskBreakdown]
+
+
 class OverviewResponse(BaseModel):
     run_id: UUID
     dataset_id: UUID
@@ -136,5 +186,9 @@ class OverviewResponse(BaseModel):
     insights: list[InsightResponse]
     recommendations: list[RecommendationResponse]
     trend: TrendBlock
+    data_quality: DataQualityBlock
+    activity: ActivityBlock
+    segments: dict[str, list[SegmentPoint]]
+    risk_summary: RiskSummary
     degradations: list[Degradation]
     limitations: list[str]

@@ -22,7 +22,7 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 
 import {
@@ -48,7 +48,7 @@ import {
   fetchTools,
 } from "../lib/enterprise";
 import { createReport, downloadReportPdf, pollReportUntilDone } from "../lib/reports";
-import { fetchRunOverview, RunOverview } from "../lib/runs";
+import { fetchRunOverview, fetchScenarioDetail, RunOverview } from "../lib/runs";
 import {
   AgentsView,
   DepartmentsView,
@@ -140,7 +140,7 @@ const findingTypeLabels: Record<string, string> = {
   prompt_health: "Качество запроса",
 };
 
-const severityLabels: Record<string, string> = {
+const dashboardSeverityLabels: Record<string, string> = {
   low: "низкий приоритет",
   medium: "средний приоритет",
   high: "высокий приоритет",
@@ -519,7 +519,89 @@ function formatDegradations(degradations: RunOverview["degradations"]) {
     .join(", ");
 }
 
+const segmentLabels: Record<string, string> = {
+  team: "Команды",
+  direction: "Направления",
+  agent_id: "Агенты",
+  model: "Модели",
+  language: "Языки",
+};
+
+const fieldLabels: Record<string, string> = {
+  team: "Команда",
+  direction: "Направление",
+  agent_id: "Агент",
+  model: "Модель",
+  language: "Язык",
+};
+
+const warningLabels: Record<string, string> = {
+  invalid_timestamp: "Некорректная дата",
+  sensitive_data_masked: "Чувствительные данные скрыты",
+};
+
+const severityLabels: Record<string, string> = {
+  critical: "Критические",
+  high: "Высокие",
+  medium: "Средние",
+  low: "Низкие",
+};
+
+function formatScenarioSample(maskedText: string) {
+  try {
+    const payload = JSON.parse(maskedText) as { messages?: Array<{ role?: string; content?: string }> };
+    const prompt = payload.messages
+      ?.filter((message) => message.role === "user")
+      .map((message) => message.content)
+      .filter(Boolean)
+      .join(" ");
+    if (prompt) return prompt.length > 420 ? `${prompt.slice(0, 420)}…` : prompt;
+  } catch {
+    // Some integrations send plain text instead of a JSON payload.
+  }
+  return maskedText.length > 420 ? `${maskedText.slice(0, 420)}…` : maskedText;
+}
+
+function ActivityChart({ points, mode }: {
+  points: RunOverview["activity"]["by_date"];
+  mode: "date" | "hour";
+}) {
+  if (points.length === 0) return <p className="panel-empty">Для этого среза нет корректных дат.</p>;
+  const maxCount = Math.max(...points.map((point) => point.count), 1);
+  return (
+    <div className="activity-chart" role="img" aria-label="Распределение запросов по времени">
+      {points.map((point) => {
+        const label = mode === "date"
+          ? new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short" }).format(new Date(`${point.key}T00:00:00`))
+          : point.label;
+        return (
+          <div className="activity-column" key={point.key} title={`${label}: ${point.count}`}>
+            <span className="activity-value">{point.count}</span>
+            <div className="activity-track">
+              <div className="activity-fill" style={{ height: `${Math.max((point.count / maxCount) * 100, 5)}%` }} />
+            </div>
+            <span className="activity-label">{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverview; onRequestUpload: () => void }) {
+  const [segment, setSegment] = useState("team");
+  const [activityMode, setActivityMode] = useState<"date" | "hour">("date");
+  const [selectedScenarioId, setSelectedScenarioId] = useState(
+    overview.top_scenarios[0]?.scenario_id ?? null,
+  );
+  const scenarioDetailQuery = useQuery({
+    queryKey: ["scenario-detail", overview.run_id, selectedScenarioId],
+    queryFn: () => fetchScenarioDetail(overview.run_id, selectedScenarioId!),
+    enabled: Boolean(selectedScenarioId),
+  });
+  const segmentPoints = overview.segments[segment] ?? [];
+  const scenarioDetail = scenarioDetailQuery.data;
+
   return (
     <section className="dataset-overview">
       <div className="page-heading dataset-page-heading">
@@ -562,9 +644,9 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
             <span className="metric-footnote">повторяющийся паттерн</span>
           </article>
           <article className="metric-card dataset-metric finding-metric">
-            <div className="metric-label"><span>Сигналы риска</span><WarningCircle size={17} /></div>
-            <strong>{overview.top_findings.reduce((sum, f) => sum + f.count, 0)}</strong>
-            <span className="metric-footnote">срабатывания правил могут пересекаться</span>
+            <div className="metric-label"><span>Запросы с риском</span><WarningCircle size={17} /></div>
+            <strong>{overview.risk_summary.affected_records}</strong>
+            <span className="metric-footnote">{formatPercent(overview.risk_summary.affected_share)} запросов · {overview.risk_summary.total_findings} срабатываний</span>
           </article>
         </div>
       </section>
@@ -580,6 +662,7 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
                   label={category.name}
                   value={`${category.count} · ${formatPercent(category.share)}`}
                   barShare={category.share}
+                  sublabel={`Уверенность классификации ${formatPercent(category.avg_confidence)}`}
                 />
               ))}
             </div>
@@ -590,68 +673,185 @@ function DatasetInsightsView({ overview, onRequestUpload }: { overview: RunOverv
           <div className="panel-heading"><div><span className="panel-kicker">Повторяемость</span><h2>Сценарии использования</h2></div><p>Паттерны, найденные автоматической группировкой</p></div>
           {overview.top_scenarios.length ? (
             <div className="bar-chart">
-              {overview.top_scenarios.map((scenario, index) => (
-                <BarRow
-                  key={scenario.scenario_id}
-                  label={formatScenarioName(scenario.name, index)}
-                  sublabel={scenario.is_noise ? "шум" : formatGenerationStatus(scenario.generation_status)}
-                  value={`${scenario.size} · ${formatPercent(scenario.share)}`}
-                  barShare={scenario.share}
-                />
-              ))}
+              {overview.top_scenarios.map((scenario, index) => {
+                const cohesion = Number(scenario.quality.cohesion);
+                return (
+                  <button
+                    className={`scenario-row-button ${selectedScenarioId === scenario.scenario_id ? "selected" : ""}`}
+                    key={scenario.scenario_id}
+                    type="button"
+                    onClick={() => setSelectedScenarioId(scenario.scenario_id)}
+                  >
+                    <BarRow
+                      label={formatScenarioName(scenario.name, index)}
+                      sublabel={`${formatGenerationStatus(scenario.generation_status)}${Number.isFinite(cohesion) ? ` · связность ${formatPercent(cohesion)}` : ""}`}
+                      value={`${scenario.size} · ${formatPercent(scenario.share)}`}
+                      barShare={scenario.share}
+                    />
+                  </button>
+                );
+              })}
             </div>
           ) : <p>Сценарии ещё не сгруппированы.</p>}
         </article>
       </div>
 
+      {selectedScenarioId && (
+        <article className="panel dataset-insights-panel scenario-detail-panel">
+          <div className="panel-heading">
+            <div><span className="panel-kicker">Детали сценария</span><h2>{scenarioDetail?.name ?? "Загрузка сценария…"}</h2></div>
+            <p>{scenarioDetail ? `${scenarioDetail.evidence_count} запросов в кластере · ${formatPercent(scenarioDetail.share)} датасета` : "Загружаем подтверждающие примеры"}</p>
+          </div>
+          {scenarioDetailQuery.isLoading && <div className="scenario-detail-loading" />}
+          {scenarioDetail && (
+            <div className="scenario-detail-grid">
+              <div className="scenario-summary-copy">
+                <p>{scenarioDetail.description || "Автоматическое описание недоступно — используйте примеры запросов справа."}</p>
+                {scenarioDetail.typical_phrasings.length > 0 && (
+                  <div className="phrasing-list">
+                    <strong>Типовые формулировки</strong>
+                    {scenarioDetail.typical_phrasings.slice(0, 4).map((phrase) => <span key={phrase}>{phrase}</span>)}
+                  </div>
+                )}
+                {scenarioDetail.caveats.length > 0 && <small>Ограничения: {scenarioDetail.caveats.join(" · ")}</small>}
+              </div>
+              <div className="scenario-samples">
+                <strong>Обезличенные примеры</strong>
+                {scenarioDetail.samples.length > 0
+                  ? scenarioDetail.samples.slice(0, 3).map((sample) => (
+                    <blockquote key={sample.record_id}>{formatScenarioSample(sample.masked_text)}</blockquote>
+                  ))
+                  : <p>Репрезентативные примеры не сформированы.</p>}
+              </div>
+            </div>
+          )}
+        </article>
+      )}
+
+      <div className="panel-grid dataset-analysis-grid">
+        <article className="panel dataset-insights-panel activity-panel">
+          <div className="panel-heading panel-heading-with-control">
+            <div><span className="panel-kicker">Активность</span><h2>Когда обращаются к агентам</h2></div>
+            <div className="segment-control" aria-label="Группировка активности">
+              <button className={activityMode === "date" ? "selected" : ""} type="button" onClick={() => setActivityMode("date")}>По дням</button>
+              <button className={activityMode === "hour" ? "selected" : ""} type="button" onClick={() => setActivityMode("hour")}>По времени</button>
+            </div>
+            <p>{overview.activity.valid_timestamp_records} запросов с корректной датой · {overview.activity.missing_timestamp_records} без временного среза</p>
+          </div>
+          <ActivityChart points={activityMode === "date" ? overview.activity.by_date : overview.activity.by_hour} mode={activityMode} />
+        </article>
+
+        <article className="panel dataset-insights-panel segments-panel">
+          <div className="panel-heading">
+            <div><span className="panel-kicker">Состав трафика</span><h2>Распределение запросов</h2></div>
+            <p>Доля от всех {overview.total_records} обработанных запросов</p>
+          </div>
+          <div className="dimension-tabs" aria-label="Выбор аналитического среза">
+            {Object.keys(segmentLabels).map((key) => (
+              <button className={segment === key ? "selected" : ""} type="button" key={key} onClick={() => setSegment(key)}>{segmentLabels[key]}</button>
+            ))}
+          </div>
+          <div className="bar-chart compact-bars">
+            {segmentPoints.slice(0, 8).map((point) => (
+              <BarRow
+                key={point.value}
+                label={point.is_missing ? "Не указано" : point.value}
+                value={`${point.count} · ${formatPercent(point.share)}`}
+                barShare={point.share}
+                tone={point.is_missing ? "warning" : "default"}
+              />
+            ))}
+          </div>
+        </article>
+      </div>
+
       <div className="panel-grid dataset-secondary-grid">
+        <article className="panel dataset-insights-panel data-quality-panel">
+          <div className="panel-heading"><div><span className="panel-kicker">Надёжность источника</span><h2>Качество данных</h2></div><p>{overview.data_quality.total_rows} строк проверено до запуска анализа</p></div>
+          <div className="quality-status-grid">
+            <div><CheckCircle size={16} /><strong>{overview.data_quality.accepted}</strong><span>Принято</span></div>
+            <div><WarningCircle size={16} /><strong>{overview.data_quality.accepted_with_warnings}</strong><span>С замечаниями</span></div>
+            <div><X size={16} /><strong>{overview.data_quality.rejected}</strong><span>Отклонено</span></div>
+          </div>
+          <div className="quality-fields">
+            {overview.data_quality.fields.map((field) => (
+              <BarRow
+                key={field.field}
+                label={fieldLabels[field.field] ?? field.field}
+                sublabel={field.missing > 0 ? `Не заполнено в ${field.missing} запросах` : "Заполнено во всех запросах"}
+                value={formatPercent(field.completeness)}
+                barShare={field.completeness}
+                tone={field.completeness < 0.9 ? "warning" : "default"}
+              />
+            ))}
+          </div>
+          {Object.keys(overview.data_quality.warning_counts).length > 0 && (
+            <div className="quality-warnings">
+              {Object.entries(overview.data_quality.warning_counts).map(([warning, count]) => (
+                <span key={warning}>{warningLabels[warning] ?? warning}: {count}</span>
+              ))}
+            </div>
+          )}
+        </article>
+
         <article className="panel dataset-insights-panel dataset-findings-panel">
           <div className="panel-heading"><div><span className="panel-kicker">Контроль качества</span><h2>Проблемы и риски</h2></div><p>Сигналы качества запросов и безопасности</p></div>
+          <div className="risk-summary-strip">
+            <div><strong>{overview.risk_summary.affected_records}</strong><span>запросов затронуто</span></div>
+            <div><strong>{overview.risk_summary.total_findings}</strong><span>срабатываний правил</span></div>
+            <div><strong>{formatPercent(overview.risk_summary.affected_share)}</strong><span>доля датасета</span></div>
+          </div>
+          <div className="risk-breakdowns">
+            {overview.risk_summary.by_severity.map((item) => <span key={item.key}>{dashboardSeverityLabels[item.key] ?? item.key}: {item.count}</span>)}
+          </div>
           {overview.top_findings.length ? (
             <div className="bar-chart">
-              {(() => {
-                const maxCount = Math.max(...overview.top_findings.map((f) => f.count), 1);
-                return overview.top_findings.map((finding) => (
+              {overview.top_findings.map((finding) => (
                   <BarRow
                     key={finding.rule_id}
                     label={formatFindingLabel(finding.rule_id)}
                     sublabel={formatFindingMeta(finding.type, finding.severity)}
                     value={String(finding.count)}
-                    barShare={finding.count / maxCount}
+                    barShare={finding.count / Math.max(overview.risk_summary.total_findings, 1)}
                     tone={finding.severity === "high" || finding.severity === "critical" ? "warning" : "default"}
                   />
-                ));
-              })()}
+              ))}
             </div>
           ) : <p>Находок не обнаружено.</p>}
         </article>
-
-        <article className="panel dataset-insights-panel dataset-insights-summary">
-          <div className="panel-heading"><div><span className="panel-kicker">Что важно</span><h2>Выводы и рекомендации</h2></div><p>Наблюдения, подтверждённые данными</p></div>
-          {overview.insights.length ? (
-            <ul className="insight-list">
-              {overview.insights.map((insight) => (
-                <li className="insight-item" key={insight.insight_id}>
-                  <span className="insight-type">{insight.type === "observation" ? "Наблюдение" : "Гипотеза"}</span>
-                  <p>{formatInsightStatement(insight.statement)}</p>
-                  <small>Уверенность {Math.round(insight.confidence * 100)}% · подтверждений {insight.evidence_refs.length}</small>
-                </li>
-              ))}
-            </ul>
-          ) : <p>Инсайтов пока нет.</p>}
-          {overview.recommendations.length > 0 && (
-            <ul className="insight-list">
-              {overview.recommendations.map((recommendation) => (
-                <li className="insight-item recommendation-item" key={recommendation.recommendation_id}>
-                  <span className="insight-type">Рекомендация</span>
-                  <p>{recommendation.action}</p>
-                  <small>{recommendation.rationale}</small>
-                </li>
-              ))}
-            </ul>
-          )}
-        </article>
       </div>
+
+      <article className="panel dataset-insights-panel dataset-insights-summary">
+        <div className="panel-heading"><div><span className="panel-kicker">Что важно</span><h2>Выводы и рекомендации</h2></div><p>Наблюдения, подтверждённые данными</p></div>
+        <div className="insights-columns">
+          <div>
+            {overview.insights.length ? (
+              <ul className="insight-list">
+                {overview.insights.map((insight) => (
+                  <li className="insight-item" key={insight.insight_id}>
+                    <span className="insight-type">{insight.type === "observation" ? "Наблюдение" : "Гипотеза"}</span>
+                    <p>{formatInsightStatement(insight.statement)}</p>
+                    <small>Уверенность {Math.round(insight.confidence * 100)}% · подтверждений {insight.evidence_refs.length}</small>
+                  </li>
+                ))}
+              </ul>
+            ) : <p>Инсайтов пока нет.</p>}
+          </div>
+          <div>
+            {overview.recommendations.length > 0 && (
+              <ul className="insight-list">
+                {overview.recommendations.map((recommendation) => (
+                  <li className="insight-item recommendation-item" key={recommendation.recommendation_id}>
+                    <span className="insight-type">Рекомендация</span>
+                    <p>{recommendation.action}</p>
+                    <small>{recommendation.rationale} · Основание: {recommendation.priority_basis}</small>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </article>
 
       {overview.limitations.length > 0 && (
         <article className="limitations-panel">
@@ -703,6 +903,7 @@ function WelcomeScreen({
 }
 
 export function RadarDashboard() {
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<"choose" | "demo" | "real">("choose");
   const [view, setView] = useState<View>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -794,6 +995,10 @@ export function RadarDashboard() {
         onClose={() => setUploadOpen(false)}
         onCompleted={(run) => {
           setCurrentRun(run);
+          void Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["best-practices"] }),
+            queryClient.invalidateQueries({ queryKey: ["best-practices", "top"] }),
+          ]);
           setUploadOpen(false);
           setToast(
             run.status === "degraded"
