@@ -53,6 +53,7 @@ import {
   AgentsView,
   DepartmentsView,
   EfficiencyView,
+  EnterpriseOverview,
   InsightsView,
   MethodologyView,
   SourcesView,
@@ -971,6 +972,19 @@ export function RadarDashboard() {
         if (runOverviewQuery.isLoading) return <LoadingState />;
         if (runOverviewQuery.data) return <DatasetInsightsView overview={runOverviewQuery.data} onRequestUpload={openUpload} />;
         return <DataUnavailable title="Не удалось получить статистику по прогону" reason="Проверьте, что backend и база данных доступны, и попробуйте загрузить датасет ещё раз." onRequestUpload={openUpload} />;
+      }
+      if (mode === "demo") {
+        if (overviewQuery.isLoading) return <LoadingState />;
+        if (overviewQuery.data?.data) {
+          return (
+            <EnterpriseOverview
+              data={overviewQuery.data.data}
+              practices={practices}
+              onOpenPractices={() => navigate("best-practices")}
+            />
+          );
+        }
+        return <DataUnavailable title="Демо-обзор недоступен" reason={overviewQuery.data?.error} onRequestUpload={openUpload} />;
       }
       return <DataUnavailable title="Пока нет статистики" reason="Загрузите CSV с запросами пользователей к ИИ-агенту, чтобы увидеть реальные категории, сценарии и инсайты." onRequestUpload={openUpload} />;
     }
