@@ -204,7 +204,16 @@ class BothubProvider:
                 LLMErrorCode.INVALID_JSON,
                 LLMErrorCode.SCHEMA_VALIDATION_FAILED,
             }:
-                payload = self._with_retry_instruction(payload)
+                if failure.safe_details.get("finish_reason") == "length":
+                    # A higher cap does not pre-spend tokens: providers bill the
+                    # tokens actually generated. Doubling only after a proven
+                    # truncation is cheaper than repeating the same doomed cap.
+                    payload = {
+                        **payload,
+                        "max_tokens": min(int(payload["max_tokens"]) * 2, 2000),
+                    }
+                else:
+                    payload = self._with_retry_instruction(payload)
             await self._sleep(self._retry_delay(attempt))
 
         raise AssertionError("unreachable")  # pragma: no cover

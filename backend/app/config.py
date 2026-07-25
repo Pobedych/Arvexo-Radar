@@ -34,7 +34,11 @@ class Settings(BaseSettings):
     bothub_model: str = "gemini-2.5-flash"
     llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     llm_max_retries: int = Field(default=1, ge=0, le=5)
-    llm_max_output_tokens: int = Field(default=320, ge=128, le=2000)
+    # Gemini 2.5 Flash may spend part of this budget on internal reasoning.
+    # 640 is still a small completion cap, but avoids the observed failure mode
+    # where every 320-token response ended with finish_reason="length" before
+    # the tiny JSON object was closed.
+    llm_max_output_tokens: int = Field(default=640, ge=128, le=2000)
     llm_max_samples: int = Field(default=3, ge=1, le=5)
     llm_max_sample_chars: int = Field(default=400, ge=100, le=2000)
 

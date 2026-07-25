@@ -24,12 +24,19 @@ def _settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, **values)
 
 
-def _completion(content: object, *, status: int = 200) -> httpx.Response:
+def _completion(
+    content: object, *, status: int = 200, finish_reason: str | None = None
+) -> httpx.Response:
     return httpx.Response(
         status,
         json={
             "model": "gemini-2.5-flash",
-            "choices": [{"message": {"role": "assistant", "content": content}}],
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": content},
+                    "finish_reason": finish_reason,
+                }
+            ],
             "usage": {"prompt_tokens": 91, "completion_tokens": 37, "total_tokens": 128},
         },
     )
@@ -78,7 +85,7 @@ async def test_scenario_output_is_validated_bounded_and_keeps_local_evidence() -
     assert result.data["evidence_refs"] == ["scenario:1"]
     assert result.data["typical_phrasings"] == [f"{'а' * 99}…", "второй"]
     assert result.usage["total_tokens"] == 128
-    assert captured["max_tokens"] == 320
+    assert captured["max_tokens"] == 640
     prompt = json.loads(captured["messages"][1]["content"])
     assert prompt["return_schema"]["required"] == ["name", "description"]
     assert set(prompt["return_schema"]["properties"]) == {"name", "description"}
@@ -133,6 +140,34 @@ async def test_invalid_json_is_retried_once() -> None:
     assert len(payloads[1]["messages"]) == 3
     assert "exactly one JSON object" in payloads[1]["messages"][-1]["content"]
     assert result.data["linked_insight_ids"] == ["insight:1"]
+
+
+@pytest.mark.asyncio
+async def test_length_truncation_doubles_budget_without_longer_retry_prompt() -> None:
+    payloads: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payloads.append(json.loads(request.content))
+        if len(payloads) == 1:
+            return _completion('{"name":"Сводки"', finish_reason="length")
+        return _completion(
+            '{"name":"Сводки","description":"Краткие сводки."}',
+            finish_reason="stop",
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = BothubProvider(_settings(), client=client, sleep=_no_sleep)
+        result = await provider.generate(
+            operation=LLMOperation.SCENARIO_NAMING,
+            schema_version="v1",
+            evidence={"typical_phrasings": ["пример"], "evidence_refs": ["scenario:1"]},
+            locale="ru-RU",
+            idempotency_key="run:scenario:length",
+        )
+
+    assert [payload["max_tokens"] for payload in payloads] == [640, 1280]
+    assert [len(payload["messages"]) for payload in payloads] == [2, 2]
+    assert result.data["name"] == "Сводки"
 
 
 @pytest.mark.asyncio
