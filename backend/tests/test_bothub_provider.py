@@ -85,7 +85,7 @@ async def test_scenario_output_is_validated_bounded_and_keeps_local_evidence() -
     assert result.data["evidence_refs"] == ["scenario:1"]
     assert result.data["typical_phrasings"] == [f"{'а' * 99}…", "второй"]
     assert result.usage["total_tokens"] == 128
-    assert captured["max_tokens"] == 640
+    assert captured["max_tokens"] == 2000
     prompt = json.loads(captured["messages"][1]["content"])
     assert prompt["return_schema"]["required"] == ["name", "description"]
     assert set(prompt["return_schema"]["properties"]) == {"name", "description"}
@@ -165,7 +165,7 @@ async def test_length_truncation_doubles_budget_without_longer_retry_prompt() ->
             idempotency_key="run:scenario:length",
         )
 
-    assert [payload["max_tokens"] for payload in payloads] == [640, 1280]
+    assert [payload["max_tokens"] for payload in payloads] == [2000, 4000]
     assert [len(payload["messages"]) for payload in payloads] == [2, 2]
     assert result.data["name"] == "Сводки"
 

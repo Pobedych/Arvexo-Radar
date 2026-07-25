@@ -210,7 +210,7 @@ class BothubProvider:
                     # truncation is cheaper than repeating the same doomed cap.
                     payload = {
                         **payload,
-                        "max_tokens": min(int(payload["max_tokens"]) * 2, 2000),
+                        "max_tokens": min(int(payload["max_tokens"]) * 2, 4096),
                     }
                 else:
                     payload = self._with_retry_instruction(payload)
