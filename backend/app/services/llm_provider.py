@@ -18,6 +18,19 @@ class LLMOperation(str, Enum):
     RECOMMENDATION = "recommendation"
 
 
+class LLMErrorCode(str, Enum):
+    """Safe, provider-agnostic failure categories exposed in run degradations."""
+
+    PROVIDER_UNAVAILABLE = "LLM_PROVIDER_UNAVAILABLE"
+    TIMEOUT = "LLM_TIMEOUT"
+    TRANSPORT_ERROR = "LLM_TRANSPORT_ERROR"
+    HTTP_ERROR = "LLM_HTTP_ERROR"
+    INVALID_RESPONSE = "LLM_INVALID_RESPONSE"
+    INVALID_JSON = "LLM_INVALID_JSON"
+    SCHEMA_VALIDATION_FAILED = "LLM_SCHEMA_VALIDATION_FAILED"
+    INVALID_EVIDENCE = "LLM_INVALID_EVIDENCE"
+
+
 @dataclass(frozen=True)
 class LLMProvenance:
     provider: str
@@ -42,9 +55,18 @@ class LLMProviderError(Exception):
     section 12).
     """
 
-    def __init__(self, message: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: LLMErrorCode = LLMErrorCode.PROVIDER_UNAVAILABLE,
+        retryable: bool = False,
+        safe_details: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
+        self.code = code
         self.retryable = retryable
+        self.safe_details = dict(safe_details or {})
 
 
 class LLMProvider(Protocol):

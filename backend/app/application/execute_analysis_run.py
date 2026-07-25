@@ -193,12 +193,16 @@ class ExecuteAnalysisRun:
                 scenario.caveats = result.data.get("caveats", [])
                 scenario.generation_status = "generated"
                 record_llm_result(result)
-            except LLMProviderError:
+            except LLMProviderError as exc:
                 scenario.name = f"Кластер {scenario.cluster_label}"
                 scenario.description = None
                 scenario.generation_status = "degraded"
                 degradations.append(
-                    {"code": "LLM_PROVIDER_UNAVAILABLE", "affected": [f"scenario:{scenario.id}"]}
+                    {
+                        "code": exc.code.value,
+                        "affected": [f"scenario:{scenario.id}"],
+                        "details": exc.safe_details,
+                    }
                 )
 
         if self._best_practice_detector is not None:
@@ -296,9 +300,13 @@ class ExecuteAnalysisRun:
                         caveats=result.data.get("caveats", []),
                     )
                 )
-            except LLMProviderError:
+            except LLMProviderError as exc:
                 degradations.append(
-                    {"code": "LLM_PROVIDER_UNAVAILABLE", "affected": [f"recommendation:{insight_row.id}"]}
+                    {
+                        "code": exc.code.value,
+                        "affected": [f"recommendation:{insight_row.id}"],
+                        "details": exc.safe_details,
+                    }
                 )
         await self._repo.bulk_create_recommendations(recommendation_rows)
 

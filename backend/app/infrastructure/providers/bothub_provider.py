@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import random
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -18,6 +19,7 @@ from app.schemas.llm import (
     ScenarioNamingOutput,
 )
 from app.services.llm_provider import (
+    LLMErrorCode,
     LLMOperation,
     LLMProvenance,
     LLMProviderError,
@@ -26,6 +28,7 @@ from app.services.llm_provider import (
 
 _PROMPT_VERSION = "bothub-json-v1"
 _RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+logger = logging.getLogger(__name__)
 
 _OUTPUT_MODELS: dict[LLMOperation, type[BaseModel]] = {
     LLMOperation.SCENARIO_NAMING: ScenarioNamingOutput,
@@ -74,8 +77,16 @@ _OPERATION_INSTRUCTIONS = {
 
 
 class _AttemptError(Exception):
-    def __init__(self, *, retryable: bool) -> None:
+    def __init__(
+        self,
+        *,
+        code: LLMErrorCode,
+        retryable: bool,
+        safe_details: dict[str, Any] | None = None,
+    ) -> None:
+        self.code = code
         self.retryable = retryable
+        self.safe_details = dict(safe_details or {})
 
 
 class BothubProvider:
@@ -171,14 +182,30 @@ class BothubProvider:
                     ),
                     usage=usage,
                 )
-            except (httpx.TimeoutException, httpx.TransportError):
-                failure = _AttemptError(retryable=True)
+            except httpx.TimeoutException:
+                failure = _AttemptError(code=LLMErrorCode.TIMEOUT, retryable=True)
+            except httpx.TransportError:
+                failure = _AttemptError(code=LLMErrorCode.TRANSPORT_ERROR, retryable=True)
             except _AttemptError as exc:
                 failure = exc
 
+            logger.warning(
+                "BotHub generation attempt failed: operation=%s code=%s attempt=%d/%d "
+                "retryable=%s details=%s",
+                operation.value,
+                failure.code.value,
+                attempt + 1,
+                self._max_retries + 1,
+                failure.retryable,
+                failure.safe_details,
+            )
+
             if not failure.retryable or attempt == self._max_retries:
                 raise LLMProviderError(
-                    "BotHub generation failed.", retryable=failure.retryable
+                    "BotHub generation failed.",
+                    code=failure.code,
+                    retryable=failure.retryable,
+                    safe_details=failure.safe_details,
                 ) from None
             await self._sleep(self._retry_delay(attempt))
 
@@ -217,7 +244,11 @@ class BothubProvider:
     @staticmethod
     def _extract_content(response: httpx.Response) -> tuple[str, str | None, dict[str, int]]:
         if response.status_code >= 400:
-            raise _AttemptError(retryable=response.status_code in _RETRYABLE_STATUSES)
+            raise _AttemptError(
+                code=LLMErrorCode.HTTP_ERROR,
+                retryable=response.status_code in _RETRYABLE_STATUSES,
+                safe_details={"status_code": response.status_code},
+            )
         try:
             body = response.json()
             choices = body["choices"]
@@ -225,9 +256,9 @@ class BothubProvider:
             model = body.get("model")
             raw_usage = body.get("usage", {})
         except (ValueError, KeyError, IndexError, TypeError):
-            raise _AttemptError(retryable=True) from None
+            raise _AttemptError(code=LLMErrorCode.INVALID_RESPONSE, retryable=True) from None
         if not isinstance(content, str) or not content.strip():
-            raise _AttemptError(retryable=True)
+            raise _AttemptError(code=LLMErrorCode.INVALID_RESPONSE, retryable=True)
         usage = (
             {
                 key: value
@@ -283,9 +314,25 @@ class BothubProvider:
                 normalized = "\n".join(lines[1:-1])
         try:
             parsed = json.loads(normalized)
+        except (json.JSONDecodeError, TypeError):
+            raise _AttemptError(code=LLMErrorCode.INVALID_JSON, retryable=True) from None
+        try:
             validated = _OUTPUT_MODELS[operation].model_validate(parsed)
-        except (json.JSONDecodeError, ValidationError, TypeError):
-            raise _AttemptError(retryable=True) from None
+        except ValidationError as exc:
+            issues = [
+                {
+                    "type": str(issue.get("type", "validation_error")),
+                    "loc": ".".join(str(part) for part in issue.get("loc", ())),
+                }
+                for issue in exc.errors(include_url=False, include_context=False, include_input=False)[
+                    :10
+                ]
+            ]
+            raise _AttemptError(
+                code=LLMErrorCode.SCHEMA_VALIDATION_FAILED,
+                retryable=True,
+                safe_details={"issues": issues},
+            ) from None
 
         data = validated.model_dump()
         if operation is LLMOperation.SCENARIO_NAMING:
@@ -307,7 +354,7 @@ class BothubProvider:
                 evidence.get("linked_insight_ids"), limit=20
             )
             if not data["linked_insight_ids"]:
-                raise _AttemptError(retryable=False)
+                raise _AttemptError(code=LLMErrorCode.INVALID_EVIDENCE, retryable=False)
         return data
 
     @staticmethod

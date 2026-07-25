@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CreateRunRequest(BaseModel):
@@ -14,6 +14,7 @@ class CreateRunRequest(BaseModel):
 class Degradation(BaseModel):
     code: str
     affected: list[str]
+    details: dict = Field(default_factory=dict)
 
 
 class RunResponse(BaseModel):

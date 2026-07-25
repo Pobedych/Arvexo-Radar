@@ -39,3 +39,5 @@ Thumbs.db
 # deploy artifacts
 deploy_key
 deploy_key.pub
+runs.json
+.claude

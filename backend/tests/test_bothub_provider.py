@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from app.config import Settings
 from app.infrastructure.providers.bothub_provider import BothubProvider
 from app.infrastructure.providers.factory import build_llm_provider
-from app.services.llm_provider import LLMOperation, LLMProviderError
+from app.services.llm_provider import LLMErrorCode, LLMOperation, LLMProviderError
 
 
 def _settings(**overrides: object) -> Settings:
@@ -144,8 +144,70 @@ async def test_authentication_error_is_not_retried_or_exposed() -> None:
             )
 
     assert calls == 1
+    assert exc_info.value.code is LLMErrorCode.HTTP_ERROR
+    assert exc_info.value.safe_details == {"status_code": 401}
     assert exc_info.value.retryable is False
     assert "provider details" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("content", "expected_code", "expected_issue"),
+    [
+        ("not-json", LLMErrorCode.INVALID_JSON, None),
+        (
+            json.dumps({"name": "Без обязательного описания"}, ensure_ascii=False),
+            LLMErrorCode.SCHEMA_VALIDATION_FAILED,
+            {"type": "missing", "loc": "description"},
+        ),
+    ],
+)
+async def test_structured_output_failures_have_safe_diagnostic_codes(
+    content: str,
+    expected_code: LLMErrorCode,
+    expected_issue: dict[str, str] | None,
+) -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: _completion(content))
+    ) as client:
+        provider = BothubProvider(_settings(llm_max_retries=0), client=client)
+        with pytest.raises(LLMProviderError) as exc_info:
+            await provider.generate(
+                operation=LLMOperation.SCENARIO_NAMING,
+                schema_version="v1",
+                evidence={"typical_phrasings": ["пример"], "evidence_refs": ["scenario:1"]},
+                locale="ru-RU",
+                idempotency_key="run:scenario:diagnostic",
+            )
+
+    assert exc_info.value.code is expected_code
+    if expected_issue is None:
+        assert exc_info.value.safe_details == {}
+    else:
+        assert expected_issue in exc_info.value.safe_details["issues"]
+    assert content not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_timeout_has_distinct_diagnostic_code() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("secret timeout detail", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = BothubProvider(_settings(llm_max_retries=0), client=client)
+        with pytest.raises(LLMProviderError) as exc_info:
+            await provider.generate(
+                operation=LLMOperation.SCENARIO_NAMING,
+                schema_version="v1",
+                evidence={"typical_phrasings": [], "evidence_refs": ["scenario:1"]},
+                locale="ru-RU",
+                idempotency_key="run:scenario:timeout",
+            )
+
+    assert exc_info.value.code is LLMErrorCode.TIMEOUT
+    assert exc_info.value.retryable is True
+    assert exc_info.value.safe_details == {}
+    assert "secret timeout detail" not in str(exc_info.value)
 
 
 def test_bothub_mode_requires_secret_and_factory_builds_adapter() -> None:
