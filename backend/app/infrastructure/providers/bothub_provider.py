@@ -39,9 +39,9 @@ _OUTPUT_MODELS: dict[LLMOperation, type[BaseModel]] = {
 }
 
 _GENERATED_FIELDS: dict[LLMOperation, set[str]] = {
-    LLMOperation.SCENARIO_NAMING: {"name", "description"},
-    LLMOperation.INSIGHT_WORDING: {"statement", "limitations"},
-    LLMOperation.RECOMMENDATION: {"action", "rationale", "priority_basis"},
+    LLMOperation.SCENARIO_NAMING: {"name"},
+    LLMOperation.INSIGHT_WORDING: {"statement"},
+    LLMOperation.RECOMMENDATION: {"action"},
 }
 
 _OPERATION_INSTRUCTIONS = {
@@ -370,10 +370,26 @@ class BothubProvider:
         finish_reason: str | None = None,
     ) -> dict[str, Any]:
         parsed = BothubProvider._parse_json_object(content, finish_reason=finish_reason)
-        if operation is LLMOperation.INSIGHT_WORDING:
+        if operation is LLMOperation.SCENARIO_NAMING:
+            samples = BothubProvider._string_list(evidence.get("typical_phrasings"), limit=1)
+            fallback = samples[0] if samples else str(parsed.get("name", "Сценарий"))
+            parsed = {
+                "description": f"Сценарий включает запросы, похожие на: {fallback}"[:1000],
+                **parsed,
+            }
+        elif operation is LLMOperation.INSIGHT_WORDING:
             parsed = {
                 "type": str(evidence.get("type", "observation"))[:80],
                 "confidence": evidence.get("confidence", 0.0),
+                "limitations": BothubProvider._string_list(
+                    evidence.get("limitations"), limit=10
+                ),
+                **parsed,
+            }
+        elif operation is LLMOperation.RECOMMENDATION:
+            parsed = {
+                "rationale": BothubProvider._truncate(evidence.get("statement"), 1200),
+                "priority_basis": "evidence_strength",
                 **parsed,
             }
         try:

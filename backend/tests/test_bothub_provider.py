@@ -89,8 +89,8 @@ async def test_scenario_output_is_validated_bounded_and_keeps_local_evidence() -
     assert captured["reasoning_effort"] == "none"
     assert captured["max_tokens"] == 640
     prompt = json.loads(captured["messages"][1]["content"])
-    assert prompt["return_schema"]["required"] == ["name", "description"]
-    assert set(prompt["return_schema"]["properties"]) == {"name", "description"}
+    assert prompt["return_schema"]["required"] == ["name"]
+    assert set(prompt["return_schema"]["properties"]) == {"name"}
     assert len(prompt["evidence"]["typical_phrasings"]) == 2
 
 
@@ -311,9 +311,9 @@ async def test_authentication_error_is_not_retried_or_exposed() -> None:
     [
         ("not-json", LLMErrorCode.INVALID_JSON, None),
         (
-            json.dumps({"name": "Без обязательного описания"}, ensure_ascii=False),
+            json.dumps({"name": ""}, ensure_ascii=False),
             LLMErrorCode.SCHEMA_VALIDATION_FAILED,
-            {"type": "missing", "loc": "description"},
+            {"type": "string_too_short", "loc": "name"},
         ),
     ],
 )
