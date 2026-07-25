@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     bothub_model: str = "gemini-2.5-flash"
     # Short structured enrichment does not need a reasoning-heavy model.
     # Flash-Lite is substantially cheaper and reliably returns bounded JSON.
-    bothub_structured_model: str = "gemini-2.5-flash-lite"
+    bothub_structured_model: str = "gemini-2.0-flash-lite-001"
     llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     llm_max_retries: int = Field(default=1, ge=0, le=5)
     llm_max_output_tokens: int = Field(default=640, ge=128, le=4096)

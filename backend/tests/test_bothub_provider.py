@@ -18,7 +18,7 @@ def _settings(**overrides: object) -> Settings:
         "bothub_api_key": "test-secret",
         "bothub_base_url": "https://openai.bothub.chat/v1",
         "bothub_model": "gemini-2.5-flash",
-        "bothub_structured_model": "gemini-2.5-flash-lite",
+        "bothub_structured_model": "gemini-2.0-flash-lite-001",
         "llm_max_retries": 2,
     }
     values.update(overrides)
@@ -86,7 +86,7 @@ async def test_scenario_output_is_validated_bounded_and_keeps_local_evidence() -
     assert result.data["evidence_refs"] == ["scenario:1"]
     assert result.data["typical_phrasings"] == [f"{'а' * 99}…", "второй"]
     assert result.usage["total_tokens"] == 128
-    assert captured["model"] == "gemini-2.5-flash-lite"
+    assert captured["model"] == "gemini-2.0-flash-lite-001"
     assert captured["max_tokens"] == 640
     prompt = json.loads(captured["messages"][1]["content"])
     assert prompt["return_schema"]["required"] == ["name", "description"]
