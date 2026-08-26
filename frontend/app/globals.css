@@ -516,3 +516,12 @@ h1, h2, h3, p, dl, dd { margin-top: 0; }
 .welcome-option-body strong { font-size: 13.5px; font-weight: 650; }
 .welcome-option-body span { color: var(--text-tertiary); font-size: 11px; line-height: 1.45; }
 .welcome-option-arrow { flex: 0 0 auto; color: var(--text-tertiary); }
+.welcome-details { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--border); text-align: left; }
+.welcome-details h2 { margin: 0 0 12px; font-size: 14px; font-weight: 680; letter-spacing: -.01em; }
+.welcome-details ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.welcome-details li { display: grid; gap: 2px; }
+.welcome-details li strong { color: var(--text-primary); font-size: 12.5px; font-weight: 650; }
+.welcome-details li span { color: var(--text-tertiary); font-size: 11px; line-height: 1.45; }
+.welcome-product-link { margin: 16px 0 0; color: var(--text-tertiary); font-size: 11px; }
+.welcome-product-link a { color: var(--accent); text-decoration: none; }
+.welcome-product-link a:hover { text-decoration: underline; }

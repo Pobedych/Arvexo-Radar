@@ -898,6 +898,26 @@ function WelcomeScreen({
             <CaretRight size={18} className="welcome-option-arrow" />
           </button>
         </div>
+        <section className="welcome-details" aria-labelledby="radar-capabilities">
+          <h2 id="radar-capabilities">Что показывает Arvexo Radar</h2>
+          <ul>
+            <li>
+              <strong>Карта сценариев</strong>
+              <span>Какие задачи пользователи действительно решают с помощью ИИ-агентов.</span>
+            </li>
+            <li>
+              <strong>Эффективность и ROI</strong>
+              <span>Где автоматизация экономит время, а где процесс требует доработки.</span>
+            </li>
+            <li>
+              <strong>Лучшие практики</strong>
+              <span>Устойчивые промпты и подходы, которые можно масштабировать в компании.</span>
+            </li>
+          </ul>
+          <p className="welcome-product-link">
+            Продукт AI-экосистемы <a href="https://arvexo.ru/radar">Arvexo</a>
+          </p>
+        </section>
       </div>
     </div>
   );
