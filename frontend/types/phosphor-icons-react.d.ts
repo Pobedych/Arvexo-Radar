@@ -6,6 +6,9 @@ declare module "@phosphor-icons/react" {
   type IconComponent = ComponentType<IconProps>;
 
   export const ArrowRight: IconComponent;
+  export const ArrowLeft: IconComponent;
+  export const Bell: IconComponent;
+  export const Books: IconComponent;
   export const Buildings: IconComponent;
   export const CaretDown: IconComponent;
   export const CaretRight: IconComponent;
@@ -19,6 +22,8 @@ declare module "@phosphor-icons/react" {
   export const FileText: IconComponent;
   export const FunnelSimple: IconComponent;
   export const GearSix: IconComponent;
+  export const Gauge: IconComponent;
+  export const House: IconComponent;
   export const Info: IconComponent;
   export const Lightbulb: IconComponent;
   export const List: IconComponent;
@@ -26,11 +31,16 @@ declare module "@phosphor-icons/react" {
   export const Robot: IconComponent;
   export const RocketLaunch: IconComponent;
   export const SealCheck: IconComponent;
+  export const ShareNetwork: IconComponent;
+  export const ShieldCheck: IconComponent;
   export const Sparkle: IconComponent;
   export const SquaresFour: IconComponent;
   export const SlidersHorizontal: IconComponent;
   export const TrendDown: IconComponent;
   export const TrendUp: IconComponent;
+  export const Star: IconComponent;
+  export const UserCircle: IconComponent;
+  export const Warning: IconComponent;
   export const UsersThree: IconComponent;
   export const WarningCircle: IconComponent;
   export const Wrench: IconComponent;

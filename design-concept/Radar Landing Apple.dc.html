@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<style>
+:root{--acc:#f5f5f7;--acc-soft:rgba(255,255,255,.10)}
+html{scroll-behavior:smooth}
+body{margin:0;background:#000;color:#e7e9ec;-webkit-font-smoothing:antialiased;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Inter,sans-serif}
+a{color:var(--acc);text-decoration:none}
+a:hover{color:#fff}
+@keyframes rdr-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes rdr-pulse{0%,100%{opacity:.35}50%{opacity:1}}
+</style>
+</helmet>
+<div style="background:#000;overflow-x:hidden">
+
+<nav style="position:sticky;top:0;z-index:30;height:50px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:0 clamp(20px,5vw,60px);background:rgba(0,0,0,.72);backdrop-filter:blur(24px) saturate(180%);border-bottom:1px solid rgba(255,255,255,.07)">
+  <a href="#top" style="display:inline-flex;align-items:center;gap:9px;color:#e7e9ec;font-size:14.5px;font-weight:600;letter-spacing:-.01em">
+    <span style="display:grid;width:22px;height:22px;place-items:center;border-radius:6px;background:var(--acc);color:#05070a;font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace">R</span>Radar
+  </a>
+  <div style="display:flex;align-items:center;gap:clamp(14px,2.4vw,30px);font-size:12.5px;font-weight:450;color:#98a0aa">
+    <a href="#value" style="color:inherit">Ценность</a>
+    <a href="#how" style="color:inherit">Как работает</a>
+    <a href="#inside" style="color:inherit">Что внутри</a>
+    <a href="#proof" style="color:inherit">Доказательность</a>
+  </div>
+  <a href="#cta" style="display:inline-flex;align-items:center;height:30px;padding:0 14px;border-radius:15px;background:var(--acc);color:#05070a;font-size:12.5px;font-weight:600">Открыть Radar</a>
+</nav>
+
+<header id="top" style="position:relative;padding:clamp(80px,13vh,150px) clamp(20px,5vw,60px) 0;text-align:center">
+  <div style="position:absolute;inset:0 0 auto 0;height:80vh;pointer-events:none;background:radial-gradient(90% 55% at 50% -8%,rgba(255,255,255,.11),transparent 70%)"></div>
+  <div style="position:relative;max-width:1040px;margin:0 auto">
+    <p data-reveal style="margin:0 0 20px;font:650 11.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.2em;text-transform:uppercase;color:#8a9099">Enterprise AI Effectiveness</p>
+    <h1 data-reveal style="margin:0 0 22px;font-size:clamp(42px,7.6vw,94px);line-height:.96;font-weight:640;letter-spacing:-.045em;text-wrap:balance">Не мнения об AI.<br>Числа.<br><span style="color:#69707b">И практики, которые можно повторить.</span></h1>
+    <p data-reveal style="max-width:46ch;margin:0 auto;color:#98a0aa;font-size:clamp(16px,1.7vw,21px);line-height:1.55;text-wrap:pretty">Radar превращает журналы запросов к корпоративным ИИ-агентам в проверяемую картину: какие сценарии преобладают, где ломается качество и окупается ли AI-инфраструктура.</p>
+    <div data-reveal style="display:flex;flex-wrap:wrap;justify-content:center;gap:26px;margin-top:30px;font-size:15px;font-weight:500">
+      <a href="#cta">Открыть дашборд&nbsp;›</a>
+      <a href="#how">Как это работает&nbsp;›</a>
+    </div>
+  </div>
+
+  <div data-reveal style="position:relative;max-width:1080px;margin:clamp(48px,7vw,88px) auto 0;border:1px solid rgba(255,255,255,.09);border-radius:26px;background:linear-gradient(180deg,#101317,#08090b);box-shadow:0 40px 120px rgba(255,255,255,.05),0 2px 0 rgba(255,255,255,.04) inset;overflow:hidden;text-align:left">
+    <div style="display:flex;align-items:center;gap:10px;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.06)">
+      <span style="display:flex;gap:6px"><i style="width:9px;height:9px;border-radius:50%;background:#2a2f36;display:block"></i><i style="width:9px;height:9px;border-radius:50%;background:#2a2f36;display:block"></i><i style="width:9px;height:9px;border-radius:50%;background:#2a2f36;display:block"></i></span>
+      <span style="margin-left:6px;font:600 10.5px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:#69707b">Executive Overview · июль 2026</span>
+      <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font:650 10px ui-monospace,Menlo,monospace;color:#63e0a5"><i style="width:6px;height:6px;border-radius:50%;background:#37d17f;box-shadow:0 0 8px #37d17f;display:block;animation:rdr-pulse 2.2s ease-in-out infinite"></i>LIVE</span>
+      <span style="padding:3px 7px;border-radius:5px;background:#2b2410;color:#f1c968;font:700 9px ui-monospace,Menlo,monospace;letter-spacing:.06em">DEMO DATA</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:rgba(255,255,255,.06)">
+      <div style="padding:20px 22px;background:#0b0d10"><p style="margin:0 0 12px;font:600 9.5px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:#69707b">Полная стоимость · A</p><strong style="font:700 26px/1 ui-monospace,Menlo,monospace;letter-spacing:-.03em">1,17 млн ₽</strong></div>
+      <div style="padding:20px 22px;background:#0b0d10"><p style="margin:0 0 12px;font:600 9.5px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:#69707b">Экономия · B</p><strong style="font:700 26px/1 ui-monospace,Menlo,monospace;letter-spacing:-.03em;color:#63e0a5">2,27 млн ₽</strong></div>
+      <div style="padding:20px 22px;background:#0b0d10"><p style="margin:0 0 12px;font:600 9.5px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:#69707b">ROI</p><strong style="font:700 26px/1 ui-monospace,Menlo,monospace;letter-spacing:-.03em;color:#63e0a5">+94%</strong></div>
+      <div style="padding:20px 22px;background:#0b0d10"><p style="margin:0 0 12px;font:600 9.5px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:#69707b">Payback</p><strong style="font:700 26px/1 ui-monospace,Menlo,monospace;letter-spacing:-.03em">1,9×</strong></div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:1px;background:rgba(255,255,255,.06)">
+      <div style="padding:22px;background:#0b0d10">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><span style="font-size:12.5px;font-weight:600">Запросы и стоимость</span><span style="display:flex;gap:12px;font:10px ui-monospace,Menlo,monospace;color:#98a0aa"><span>■ запросы</span><span style="color:var(--acc)">■ экономия</span></span></div>
+        <svg viewBox="0 0 520 150" style="display:block;width:100%;height:150px;overflow:visible" aria-hidden="true">
+          <defs><linearGradient id="rdrFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5f5f7" stop-opacity=".34"/><stop offset="1" stop-color="#f5f5f7" stop-opacity="0"/></linearGradient></defs>
+          <g stroke="rgba(255,255,255,.06)"><line x1="0" y1="35" x2="520" y2="35"/><line x1="0" y1="75" x2="520" y2="75"/><line x1="0" y1="115" x2="520" y2="115"/></g>
+          <path d="M0 118 L58 108 L116 112 L174 88 L232 95 L290 66 L348 72 L406 44 L464 38 L520 22 L520 150 L0 150 Z" fill="url(#rdrFill)"/>
+          <path d="M0 118 L58 108 L116 112 L174 88 L232 95 L290 66 L348 72 L406 44 L464 38 L520 22" fill="none" stroke="#f5f5f7" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M0 132 L58 129 L116 130 L174 124 L232 126 L290 118 L348 120 L406 112 L464 110 L520 104" fill="none" stroke="#363d47" stroke-width="1.5" stroke-dasharray="4 4"/>
+        </svg>
+      </div>
+      <div style="padding:22px;background:#0b0d10">
+        <p style="margin:0 0 14px;font-size:12.5px;font-weight:600">Ведущие сценарии</p>
+        <div style="display:grid;gap:12px">
+          <div><div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px"><span>Подготовка отчётности</span><b style="font:700 10.5px ui-monospace,Menlo,monospace;color:var(--acc)">31%</b></div><div style="height:5px;border-radius:99px;background:#1c2026"><div style="width:31%;height:100%;border-radius:99px;background:var(--acc)"></div></div></div>
+          <div><div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px"><span>Разбор договоров</span><b style="font:700 10.5px ui-monospace,Menlo,monospace;color:var(--acc)">24%</b></div><div style="height:5px;border-radius:99px;background:#1c2026"><div style="width:24%;height:100%;border-radius:99px;background:var(--acc)"></div></div></div>
+          <div><div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px"><span>Поддержка кода</span><b style="font:700 10.5px ui-monospace,Menlo,monospace;color:var(--acc)">18%</b></div><div style="height:5px;border-radius:99px;background:#1c2026"><div style="width:18%;height:100%;border-radius:99px;background:var(--acc)"></div></div></div>
+          <div><div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px"><span>Онбординг сотрудников</span><b style="font:700 10.5px ui-monospace,Menlo,monospace;color:var(--acc)">11%</b></div><div style="height:5px;border-radius:99px;background:#1c2026"><div style="width:11%;height:100%;border-radius:99px;background:var(--acc)"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p data-reveal style="max-width:1080px;margin:14px auto 0;text-align:right;font:10.5px ui-monospace,Menlo,monospace;color:#69707b">// demo/mock данные, provenance помечается в UI и API</p>
+</header>
+
+<section style="padding:clamp(100px,15vh,180px) clamp(20px,5vw,60px);text-align:center">
+  <p data-reveal style="max-width:24ch;margin:0 auto;font-size:clamp(28px,5vw,60px);line-height:1.1;font-weight:620;letter-spacing:-.04em;text-wrap:balance"><span style="color:#69707b">Тысячи запросов в логах.</span> Ни один руководитель не будет читать их вручную.</p>
+  <p data-reveal style="max-width:52ch;margin:26px auto 0;color:#98a0aa;font-size:17px;line-height:1.6">Radar классифицирует их, находит устойчивые сценарии и связывает каждый вывод с подтверждающими примерами.</p>
+</section>
+
+<section id="value" style="padding:0 clamp(20px,5vw,60px) clamp(90px,12vh,150px)">
+  <div style="max-width:1180px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
+    <article data-reveal style="padding:34px 32px;border-radius:26px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#12151a,#0a0b0d)">
+      <span style="font:700 11px ui-monospace,Menlo,monospace;color:var(--acc)">01</span>
+      <h3 style="margin:16px 0 10px;font-size:24px;font-weight:620;letter-spacing:-.02em">Visibility</h3>
+      <p style="margin:0 0 22px;color:#98a0aa;font-size:14px;line-height:1.6">Пользователи, роли, подразделения, модели, агенты, инструменты, токены, стоимость и стабильность — из content-free телеметрии шлюза.</p>
+      <div style="font:13px ui-monospace,Menlo,monospace;color:#e7e9ec">4 агента · 6 подразделений</div>
+    </article>
+    <article data-reveal style="padding:34px 32px;border-radius:26px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#12151a,#0a0b0d)">
+      <span style="font:700 11px ui-monospace,Menlo,monospace;color:var(--acc)">02</span>
+      <h3 style="margin:16px 0 10px;font-size:24px;font-weight:620;letter-spacing:-.02em">Business Value</h3>
+      <p style="margin:0 0 22px;color:#98a0aa;font-size:14px;line-height:1.6">Полная стоимость AI, сэкономленное время, FTE-эквивалент, Net Benefit, ROI и окупаемость по сценариям — по прозрачным формулам.</p>
+      <div style="font:13px ui-monospace,Menlo,monospace;color:#e7e9ec">ROI <b style="color:var(--acc)">+94%</b> · payback <b style="color:var(--acc)">1.9×</b></div>
+    </article>
+    <article data-reveal style="padding:34px 32px;border-radius:26px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#12151a,#0a0b0d)">
+      <span style="font:700 11px ui-monospace,Menlo,monospace;color:var(--acc)">03</span>
+      <h3 style="margin:16px 0 10px;font-size:24px;font-weight:620;letter-spacing:-.02em">Knowledge Sharing</h3>
+      <p style="margin:0 0 22px;color:#98a0aa;font-size:14px;line-height:1.6">Сильные повторяемые сценарии становятся управляемым каталогом практик: обнаружение → проверка → публикация → внедрение.</p>
+      <div style="font:13px ui-monospace,Menlo,monospace;color:#e7e9ec">Impact Score <b style="color:var(--acc)">0–100</b>, порог <b style="color:var(--acc)">70</b></div>
+    </article>
+  </div>
+</section>
+
+<section id="how" style="padding:clamp(80px,11vh,140px) 0;border-top:1px solid rgba(255,255,255,.07)">
+  <div style="max-width:1180px;margin:0 auto;padding:0 clamp(20px,5vw,60px)">
+    <p data-reveal style="margin:0 0 18px;font:650 11.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.2em;text-transform:uppercase;color:#8a9099">MVP flow</p>
+    <h2 data-reveal style="max-width:22ch;margin:0 0 12px;font-size:clamp(30px,4.6vw,54px);line-height:1.06;font-weight:630;letter-spacing:-.04em">От CSV до PDF-отчёта — один воспроизводимый путь.</h2>
+    <p data-reveal style="max-width:56ch;margin:0;color:#98a0aa;font-size:16px;line-height:1.6">Локальная аналитика прежде внешней генерации: эмбеддинги, классификация и кластеризация считаются на месте, во внешнюю LLM уходит только минимальный подготовленный контекст.</p>
+  </div>
+  <div style="margin-top:44px;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)">
+    <div data-marquee style="display:flex;width:max-content;gap:12px;animation:rdr-marquee 42s linear infinite">
+      <div style="display:flex;gap:12px;padding-right:12px">
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">01</b><span style="color:#98a0aa">Upload</span></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">02</b><span style="color:#98a0aa">Validation</span></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">03</b><span style="color:#98a0aa">Masking</span></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">04</b><span style="color:#98a0aa">Embeddings</span></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">05</b><span style="color:#98a0aa">Classification</span></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">06</b><span style="color:#98a0aa">Clustering</span></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">07</b><span style="color:#98a0aa">Scenario naming</span></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">08</b><span style="color:#98a0aa">Best practices</span></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">09</b><span style="color:#98a0aa">Business insights</span></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0c0e11;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap"><b style="color:var(--acc)">10</b><span style="color:#98a0aa">PDF report</span></div>
+      </div>
+      <div aria-hidden="true" data-marquee-clone style="display:flex;gap:12px;padding-right:12px"></div>
+    </div>
+  </div>
+</section>
+
+<section id="inside" style="padding:clamp(80px,11vh,140px) clamp(20px,5vw,60px);border-top:1px solid rgba(255,255,255,.07)">
+  <div style="max-width:1180px;margin:0 auto">
+    <p data-reveal style="margin:0 0 18px;font:650 11.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.2em;text-transform:uppercase;color:#8a9099">Что внутри</p>
+    <h2 data-reveal style="max-width:20ch;margin:0 0 56px;font-size:clamp(30px,4.6vw,54px);line-height:1.06;font-weight:630;letter-spacing:-.04em">Четыре экрана, один набор чисел.</h2>
+
+    <div style="display:grid;gap:20px">
+      <div data-reveal style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+        <div style="padding:34px 32px;border-radius:26px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(160deg,#13171c,#0a0b0d)">
+          <span style="font:650 10.5px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:#8a9099">Обзор</span>
+          <h3 style="margin:14px 0 10px;font-size:clamp(20px,2.4vw,28px);font-weight:620;letter-spacing:-.025em">Executive Overview за несколько минут</h3>
+          <p style="margin:0 0 24px;color:#98a0aa;font-size:14px;line-height:1.6">Объём использования, ведущие категории и сценарии, тренды, проблемы качества и следующие действия — на одном экране, с переходом к деталям.</p>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div style="padding:14px;border-radius:12px;background:#14171b"><p style="margin:0 0 8px;font:9.5px ui-monospace,Menlo,monospace;color:#69707b">REQUESTS</p><b style="font:700 18px ui-monospace,Menlo,monospace">18 402</b></div>
+            <div style="padding:14px;border-radius:12px;background:#14171b"><p style="margin:0 0 8px;font:9.5px ui-monospace,Menlo,monospace;color:#69707b">SUCCESS</p><b style="font:700 18px ui-monospace,Menlo,monospace;color:#63e0a5">96,4%</b></div>
+            <div style="padding:14px;border-radius:12px;background:#14171b"><p style="margin:0 0 8px;font:9.5px ui-monospace,Menlo,monospace;color:#69707b">P95</p><b style="font:700 18px ui-monospace,Menlo,monospace">2,7s</b></div>
+          </div>
+        </div>
+        <div style="padding:34px 32px;border-radius:26px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(160deg,#13171c,#0a0b0d)">
+          <span style="font:650 10.5px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:#8a9099">Эффективность</span>
+          <h3 style="margin:14px 0 10px;font-size:clamp(20px,2.4vw,28px);font-weight:620;letter-spacing:-.025em">TCO, ROI и окупаемость сценариев</h3>
+          <p style="margin:0 0 24px;color:#98a0aa;font-size:14px;line-height:1.6">A = сумма выбранных Cost Component. B = FTE_saved × стоимость FTE. Net Benefit = B − A. ROI и payback по каждому сценарию и агенту.</p>
+          <div style="display:flex;align-items:center;gap:12px;font:700 22px ui-monospace,Menlo,monospace;color:var(--acc)">
+            <span style="display:grid;width:52px;height:52px;place-items:center;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:#191d22">B</span>
+            <b style="font-weight:400;color:#69707b">−</b>
+            <span style="display:grid;width:52px;height:52px;place-items:center;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:#191d22">A</span>
+            <b style="font-weight:400;color:#69707b">=</b>
+            <span style="display:grid;padding:0 16px;height:52px;place-items:center;border-radius:14px;background:#0f2a1d;color:#63e0a5;font-size:17px">1,10 млн ₽</span>
+          </div>
+        </div>
+      </div>
+
+      <div data-reveal style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+        <div style="padding:34px 32px;border-radius:26px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(160deg,#13171c,#0a0b0d)">
+          <span style="font:650 10.5px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:#8a9099">Best Practices</span>
+          <h3 style="margin:14px 0 10px;font-size:clamp(20px,2.4vw,28px);font-weight:620;letter-spacing:-.025em">Локальный опыт → корпоративный стандарт</h3>
+          <p style="margin:0 0 24px;color:#98a0aa;font-size:14px;line-height:1.6">Классификатор выделяет кандидатов по Impact Score, охвату пользователей и успешности. Дальше — review, approve, publish, adoption.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <span style="padding:6px 10px;border-radius:8px;background:#1c2026;color:#e7e9ec;font:680 10px ui-monospace,Menlo,monospace;letter-spacing:.05em">DETECTED</span>
+            <span style="padding:6px 10px;border-radius:8px;background:#2b2410;color:#f1c968;font:680 10px ui-monospace,Menlo,monospace;letter-spacing:.05em">UNDER REVIEW</span>
+            <span style="padding:6px 10px;border-radius:8px;background:#0f2a1d;color:#63e0a5;font:680 10px ui-monospace,Menlo,monospace;letter-spacing:.05em">PUBLISHED</span>
+          </div>
+        </div>
+        <div style="padding:34px 32px;border-radius:26px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(160deg,#13171c,#0a0b0d)">
+          <span style="font:650 10.5px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:#8a9099">Отчёт</span>
+          <h3 style="margin:14px 0 10px;font-size:clamp(20px,2.4vw,28px);font-weight:620;letter-spacing:-.025em">PDF, который не расходится с дашбордом</h3>
+          <p style="margin:0 0 24px;color:#98a0aa;font-size:14px;line-height:1.6">Тот же набор метрик и знаменателей, что и в интерфейсе. Кириллица через встроенный DejaVu Sans. Готово к рассылке руководству.</p>
+          <div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:14px;background:#14171b">
+            <span style="display:grid;width:38px;height:46px;place-items:center;border-radius:6px;background:#1c2026;color:#98a0aa;font:700 9px ui-monospace,Menlo,monospace">PDF</span>
+            <span style="display:grid;gap:4px"><b style="font-size:12.5px">radar-report-2026-07.pdf</b><small style="color:#69707b;font:10px ui-monospace,Menlo,monospace">SAME NUMBERS · 14 страниц</small></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="proof" style="padding:clamp(80px,11vh,140px) clamp(20px,5vw,60px);border-top:1px solid rgba(255,255,255,.07)">
+  <div style="max-width:1180px;margin:0 auto">
+    <p data-reveal style="margin:0 0 18px;font:650 11.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.2em;text-transform:uppercase;color:#8a9099">Почему выводам можно доверять</p>
+    <h2 data-reveal style="max-width:20ch;margin:0 0 50px;font-size:clamp(30px,4.6vw,54px);line-height:1.06;font-weight:630;letter-spacing:-.04em">Гипотеза не выдаётся за факт.</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1px;background:rgba(255,255,255,.08);border-top:1px solid rgba(255,255,255,.08)">
+      <div data-reveal style="padding:30px 26px 6px;background:#000"><strong style="display:block;margin-bottom:10px;font-size:16px;font-weight:620;letter-spacing:-.015em">Локальная аналитика прежде внешней генерации</strong><span style="color:#98a0aa;font-size:13.5px;line-height:1.6">Эмбеддинги, классификация и кластеризация считаются локально. Во внешнюю LLM уходит только минимальный подготовленный контекст.</span></div>
+      <div data-reveal style="padding:30px 26px 6px;background:#000"><strong style="display:block;margin-bottom:10px;font-size:16px;font-weight:620;letter-spacing:-.015em">Content-free телеметрия</strong><span style="color:#98a0aa;font-size:13.5px;line-height:1.6">Тексты запросов и ответов не сохраняются. В production user_id хешируется с server-side salt. Best Practice не раскрывает содержимое промптов.</span></div>
+      <div data-reveal style="padding:30px 26px 6px;background:#000"><strong style="display:block;margin-bottom:10px;font-size:16px;font-weight:620;letter-spacing:-.015em">Каждый вывод связан с примерами</strong><span style="color:#98a0aa;font-size:13.5px;line-height:1.6">Вывод помечен уровнем уверенности. Денежная экономия не считается фактической без утверждённого бизнес-бенчмарка.</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="cta" style="padding:clamp(110px,17vh,200px) clamp(20px,5vw,60px);text-align:center;border-top:1px solid rgba(255,255,255,.07);background:radial-gradient(70% 60% at 50% 100%,rgba(255,255,255,.08),transparent 70%)">
+  <h2 data-reveal style="max-width:18ch;margin:0 auto 20px;font-size:clamp(34px,6vw,72px);line-height:1;font-weight:640;letter-spacing:-.045em;text-wrap:balance">Загрузите свой лог запросов.</h2>
+  <p data-reveal style="max-width:50ch;margin:0 auto 34px;color:#98a0aa;font-size:17px;line-height:1.6">Категории, карта сценариев, оценка эффективности и лучшие практики — по вашим данным, с явными пометками об уверенности и ограничениях.</p>
+  <div data-reveal style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px">
+    <a href="#top" style="display:inline-flex;align-items:center;height:44px;padding:0 26px;border-radius:22px;background:var(--acc);color:#05070a;font-size:15px;font-weight:600">Открыть Radar</a>
+    <a href="#inside" style="display:inline-flex;align-items:center;height:44px;padding:0 26px;border-radius:22px;border:1px solid rgba(255,255,255,.22);color:#e7e9ec;font-size:15px;font-weight:600">Посмотреть демо</a>
+  </div>
+</section>
+
+<footer style="padding:30px clamp(20px,5vw,60px) 50px;border-top:1px solid rgba(255,255,255,.07)">
+  <div style="max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;gap:12px 26px;align-items:center;justify-content:space-between;color:#69707b;font:11px ui-monospace,Menlo,monospace">
+    <span>Arvexo Radar · v0.3.0 — Enterprise Effectiveness MVP</span>
+    <span style="display:flex;gap:18px"><a href="https://radar.arvexo.ru" style="color:#69707b">radar.arvexo.ru</a><a href="https://arvexo.ru" style="color:#69707b">arvexo.ru</a></span>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#f5f5f7&quot;,&quot;options&quot;:[&quot;#f5f5f7&quot;,&quot;#c9a227&quot;,&quot;#37d17f&quot;,&quot;#b8b3ff&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Тема&quot;},&quot;reveal&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Движение&quot;},&quot;marquee&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Движение&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    const root = this.el || document;
+    const acc = this.props.accent;
+    if (acc) document.documentElement.style.setProperty('--acc', acc);
+
+    const clone = root.querySelector('[data-marquee-clone]');
+    const src = clone && clone.previousElementSibling;
+    if (clone && src && !clone.childElementCount) clone.innerHTML = src.innerHTML;
+    if (this.props.marquee === false) {
+      const m = root.querySelector('[data-marquee]');
+      if (m) m.style.animation = 'none';
+    }
+
+    const nodes = Array.from(root.querySelectorAll('[data-reveal]'));
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (this.props.reveal === false || reduce) return;
+    nodes.forEach((n, i) => {
+      n.style.opacity = '0';
+      n.style.transform = 'translateY(22px)';
+      n.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)';
+      n.style.transitionDelay = Math.min(i % 5, 4) * 70 + 'ms';
+    });
+    const io = new IntersectionObserver((es) => {
+      es.forEach((e) => {
+        if (!e.isIntersecting) return;
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'none';
+        io.unobserve(e.target);
+      });
+    }, { threshold: 0.14, rootMargin: '0px 0px -6% 0px' });
+    nodes.forEach((n) => io.observe(n));
+    this._io = io;
+
+    this._count = setTimeout(() => {}, 0);
+  }
+  componentWillUnmount() { if (this._io) this._io.disconnect(); }
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -23,6 +23,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 
 import {
@@ -53,11 +54,12 @@ import {
   AgentsView,
   DepartmentsView,
   EfficiencyView,
-  EnterpriseOverview,
   InsightsView,
   MethodologyView,
   SourcesView,
 } from "./EnterpriseViews";
+
+import { RadarOverview, RadarMark } from "./RadarOverview";
 
 type View =
   | "overview"
@@ -71,35 +73,35 @@ type View =
   | "methodology";
 
 const viewTitles: Record<View, string> = {
-  overview: "Обзор",
-  efficiency: "Эффективность ИИ",
-  agents: "AI-агенты",
-  departments: "Подразделения",
-  insights: "Инсайты",
-  "best-practices": "Лучшие практики",
-  sources: "Источники данных",
-  reports: "Отчёты",
-  methodology: "Настройки методики",
+  overview: "Home",
+  efficiency: "Analytics",
+  agents: "Models",
+  departments: "Monitoring",
+  insights: "Incidents",
+  "best-practices": "Recommendations",
+  sources: "Integrations",
+  reports: "Reports",
+  methodology: "Settings",
 };
 
 const navGroups = [
   {
-    label: "РАБОЧЕЕ ПРОСТРАНСТВО",
+    label: "WORKSPACE",
     items: [
-      { id: "overview" as View, label: "Обзор", icon: SquaresFour },
-      { id: "efficiency" as View, label: "Эффективность ИИ", icon: ChartBar },
-      { id: "agents" as View, label: "AI-агенты", icon: Robot },
-      { id: "departments" as View, label: "Подразделения", icon: Buildings },
-      { id: "best-practices" as View, label: "Лучшие практики", icon: SealCheck },
-      { id: "insights" as View, label: "Инсайты", icon: Lightbulb },
+      { id: "overview" as View, label: "Home", icon: SquaresFour },
+      { id: "agents" as View, label: "Models", icon: Robot },
+      { id: "departments" as View, label: "Monitoring", icon: Buildings },
+      { id: "efficiency" as View, label: "Analytics", icon: ChartBar },
+      { id: "insights" as View, label: "Incidents", icon: Lightbulb },
+      { id: "best-practices" as View, label: "Recommendations", icon: SealCheck },
     ],
   },
   {
-    label: "ДАННЫЕ",
+    label: "DATA",
     items: [
-      { id: "sources" as View, label: "Источники данных", icon: Database },
-      { id: "reports" as View, label: "Отчёты", icon: FileText },
-      { id: "methodology" as View, label: "Настройки методики", icon: GearSix },
+      { id: "reports" as View, label: "Reports", icon: FileText },
+      { id: "sources" as View, label: "Integrations", icon: Database },
+      { id: "methodology" as View, label: "Settings", icon: GearSix },
     ],
   },
 ];
@@ -196,6 +198,9 @@ function PracticeCard({
   onRecommend: (practice: BestPractice) => void;
   pending: boolean;
 }) {
+  const recommendation = practice.status === "approved" || practice.status === "scaling" || practice.status === "published"
+    ? "Практика прошла проверку. Выберите подразделения для безопасного пилота."
+    : practice.recommendation;
   return (
     <article className="practice-card">
       <div className="practice-card-top">
@@ -215,7 +220,7 @@ function PracticeCard({
         <div><dt>Экономия времени</dt><dd>{formatHours(practice.estimated_time_saved)}</dd></div>
         <div><dt>Экономия FTE</dt><dd>{practice.estimated_fte_saved.toFixed(2)}</dd></div>
       </dl>
-      <div className="practice-recommendation"><Lightbulb size={16} /><span>{practice.recommendation}</span></div>
+      <div className="practice-recommendation"><Lightbulb size={16} /><span>{recommendation}</span></div>
       <div className="practice-footer">
         <div className="tag-list">{practice.tags.slice(0, 3).map((tag) => <span key={tag}>{tag}</span>)}</div>
         <button
@@ -915,7 +920,7 @@ function WelcomeScreen({
             </li>
           </ul>
           <p className="welcome-product-link">
-            Продукт AI-экосистемы <a href="https://arvexo.ru/radar">Arvexo</a>
+            <Link href="/">← На главную</Link> · продукт AI-экосистемы <a href="https://arvexo.ru/radar">Arvexo</a>
           </p>
         </section>
       </div>
@@ -923,9 +928,9 @@ function WelcomeScreen({
   );
 }
 
-export function RadarDashboard() {
+export function RadarDashboard({ user }: { user: { email: string; name: string | null } }) {
   const queryClient = useQueryClient();
-  const [mode, setMode] = useState<"choose" | "demo" | "real">("choose");
+  const [mode, setMode] = useState<"choose" | "demo" | "real">("demo");
   const [view, setView] = useState<View>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -936,6 +941,7 @@ export function RadarDashboard() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [currentRun, setCurrentRun] = useState<RunSummary | null>(null);
   const [filters, setFilters] = useState<EnterpriseFilters>({ date_from: "2026-07-01", date_to: "2026-08-01" });
+  const activeFilterCount = Object.entries(filters).filter(([key, value]) => Boolean(value) && key !== "date_from" && key !== "date_to").length;
   const practiceQuery = useQuery({ queryKey: ["best-practices"], queryFn: fetchPractices });
   const topQuery = useQuery({ queryKey: ["best-practices", "top"], queryFn: fetchPracticeTop });
   const overviewQuery = useQuery({ queryKey: ["enterprise-overview", filters], queryFn: () => fetchOverview(filters) });
@@ -997,10 +1003,11 @@ export function RadarDashboard() {
         if (overviewQuery.isLoading) return <LoadingState />;
         if (overviewQuery.data?.data) {
           return (
-            <EnterpriseOverview
+            <RadarOverview
               data={overviewQuery.data.data}
-              practices={practices}
               onOpenPractices={() => navigate("best-practices")}
+              onOpenAgents={() => navigate("agents")}
+              onOpenMethodology={() => navigate("methodology")}
             />
           );
         }
@@ -1020,10 +1027,10 @@ export function RadarDashboard() {
   };
 
   if (mode === "choose") {
-    return <WelcomeScreen onChooseDemo={() => setMode("demo")} onChooseUpload={openUpload} />;
+    return <div className="radar-app"><WelcomeScreen onChooseDemo={() => { setCurrentRun(null); setMode("demo"); navigate("overview"); }} onChooseUpload={openUpload} /></div>;
   }
 
-  return <div className="app-shell">
+  return <div className="app-shell radar-app">
     {uploadOpen && (
       <DatasetUploadModal
         onClose={() => setUploadOpen(false)}
@@ -1045,15 +1052,18 @@ export function RadarDashboard() {
       />
     )}
     <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-      <div className="brand-row"><button type="button" className="brand" onClick={() => setMode("choose")}><span>R</span>Radar</button><button type="button" className="icon-button mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Закрыть меню"><X size={20} /></button></div>
-      <nav className="navigation" aria-label="Основная навигация">{navGroups.map((group) => <div className="nav-group" key={group.label}><p>{group.label}</p>{group.items.map((item) => { const Icon = item.icon; return <button type="button" className={`nav-item ${view === item.id ? "active" : ""}`} onClick={() => navigate(item.id)} key={item.id}><Icon size={18} /><span>{item.label}</span>{item.id === "best-practices" && practices.filter((practice) => practice.status === "detected").length > 0 && <b>{practices.filter((practice) => practice.status === "detected").length}</b>}</button>; })}</div>)}</nav>
-      <div className="sidebar-footer"><button type="button" className="workspace-button" onClick={() => setWorkspaceOpen((open) => !open)} aria-expanded={workspaceOpen}><span className="workspace-avatar">RD</span><span><strong>Arvexo Radar</strong><small>Рабочее пространство</small></span><CaretDown size={15} /></button>{workspaceOpen && <div className="workspace-menu"><button type="button"><span className="workspace-avatar small">RD</span>Arvexo Radar<CheckCircle size={15} weight="fill" /></button><button type="button"><span className="workspace-avatar small muted">ПС</span>Песочница</button></div>}</div>
+      <div className="brand-row"><button type="button" className="brand" onClick={() => setMode("choose")}><RadarMark small />arvexo <em>/ radar</em></button><button type="button" className="icon-button mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Закрыть меню"><X size={20} /></button></div>
+      <nav className="navigation" aria-label="Основная навигация">{navGroups.map((group) => <div className="nav-group" key={group.label}><p>{group.label}</p>{group.items.map((item) => { const Icon = item.icon; return <button type="button" className={`nav-item ${view === item.id ? "active" : ""}`} aria-current={view === item.id ? "page" : undefined} onClick={() => navigate(item.id)} key={item.id}><Icon size={18} /><span>{item.label}</span>{item.id === "best-practices" && practices.filter((practice) => practice.status === "detected").length > 0 && <b>{practices.filter((practice) => practice.status === "detected").length}</b>}</button>; })}</div>)}</nav>
+      <div className="sidebar-footer"><Link className="radar-home-link" href="/">← На главную</Link><button type="button" className="workspace-button" onClick={() => setWorkspaceOpen((open) => !open)} aria-expanded={workspaceOpen}><span className="workspace-avatar">RD</span><span><strong>Arvexo Radar</strong><small>Рабочее пространство</small></span><CaretDown size={15} /></button>{workspaceOpen && <div className="workspace-menu"><button type="button"><span className="workspace-avatar small">RD</span>Arvexo Radar<CheckCircle size={15} weight="fill" /></button><button type="button"><span className="workspace-avatar small muted">ПС</span>Песочница</button></div>}</div>
     </aside>
     {sidebarOpen && <button className="scrim" aria-label="Закрыть меню" onClick={() => setSidebarOpen(false)} />}
 
     <main className="main-content">
-      <header className="topbar"><div className="topbar-left"><button type="button" className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню"><List size={20} /></button><div className="breadcrumb"><span>Рабочее пространство</span><CaretRight size={12} /><span>Июль 2026</span><CaretRight size={12} /><strong>{viewTitles[view]}</strong></div></div><div className="topbar-actions"><button type="button" className="secondary-button" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><FunnelSimple size={16} />Фильтры<span>{Object.values(filters).filter(Boolean).length}</span></button><button type="button" className="secondary-button" onClick={openUpload}><Database size={16} />Загрузить датасет</button><button type="button" className="primary-button" onClick={exportReport}><DownloadSimple size={16} />Экспорт отчёта</button><span className="user-avatar" aria-label="Профиль пользователя">U</span></div></header>
-      {filtersOpen && <section className="filter-panel enterprise-filters"><label><span>С</span><input type="date" value={filters.date_from ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_from: event.target.value }))}/></label><label><span>По</span><input type="date" value={filters.date_to ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_to: event.target.value }))}/></label><label><span>Подразделение</span><select value={filters.department ?? ""} onChange={(event) => setFilters((old) => ({ ...old, department: event.target.value }))}><option value="">Все</option><option>Юридический отдел</option><option>Финансы</option><option>Продажи</option><option>HR</option><option>ИТ</option></select></label><label><span>Роль</span><select value={filters.role ?? ""} onChange={(event) => setFilters((old) => ({ ...old, role: event.target.value }))}><option value="">Все</option><option>Юрист</option><option>Аналитик</option><option>Менеджер по продажам</option><option>HR-партнёр</option></select></label><label><span>Пользователь (hash)</span><input value={filters.user ?? ""} onChange={(event) => setFilters((old) => ({ ...old, user: event.target.value }))} placeholder="user_id_hash" /></label><label><span>Агент</span><select value={filters.agent ?? ""} onChange={(event) => setFilters((old) => ({ ...old, agent: event.target.value }))}><option value="">Все</option>{agentsQuery.data?.data?.items.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></label><label><span>Модель</span><select value={filters.model ?? ""} onChange={(event) => setFilters((old) => ({ ...old, model: event.target.value }))}><option value="">Все</option><option>GigaChat Pro</option><option>YandexGPT 5 Pro</option><option>Corporate LLM 70B</option></select></label><label><span>Сценарий</span><select value={filters.scenario ?? ""} onChange={(event) => setFilters((old) => ({ ...old, scenario: event.target.value }))}><option value="">Все</option><option value="contract-review">Проверка договоров</option><option value="management-report">Управленческий отчёт</option><option value="crm-followup">Follow-up в CRM</option></select></label><label><span>Инструмент</span><select value={filters.tool ?? ""} onChange={(event) => setFilters((old) => ({ ...old, tool: event.target.value }))}><option value="">Все</option><option>Корпоративные документы</option><option>CRM</option><option>Почта</option><option>Браузер</option></select></label><button type="button" className="text-button" onClick={() => setFiltersOpen(false)}>Готово</button><button type="button" className="text-button muted" onClick={() => setFilters({ date_from: "2026-07-01", date_to: "2026-08-01" })}>Сбросить</button></section>}
+      <header className="topbar">
+        <div className="topbar-left"><button type="button" className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню"><List size={20} /></button><label className="global-search"><MagnifyingGlass size={16} /><input aria-label="Глобальный поиск" placeholder="Поиск моделей, метрик или чего угодно..." /><kbd>⌘K</kbd></label><div className="breadcrumb"><span>Рабочее пространство</span><CaretRight size={12} /><strong>{viewTitles[view]}</strong></div></div>
+        <div className="topbar-actions"><span className="radar-period">{overviewQuery.data?.data?.period.label ?? "Выберите период в фильтрах"}</span><button type="button" className="secondary-button filter-trigger" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><FunnelSimple size={16} />Фильтры{activeFilterCount > 0 && <span>{activeFilterCount}</span>}</button><button type="button" className="secondary-button" onClick={openUpload}><Database size={16} />Загрузить датасет</button><button type="button" className="primary-button export-button" onClick={exportReport}><DownloadSimple size={16} /><span>Экспорт отчёта</span></button><details className="user-menu"><summary className="user-avatar" aria-label="Профиль пользователя">{(user.name ?? user.email).split(/[\s@._-]+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("")}</summary><div><strong>{user.name || "Arvexo Account"}</strong><small>{user.email}</small><Link href="/auth/logout">Выйти</Link></div></details></div>
+      </header>
+      {filtersOpen && <section className="filter-panel enterprise-filters" aria-label="Фильтры данных"><div className="filter-context"><strong>Период — контекст данных</strong><span>Дополнительные фильтры не меняют сохранённую методику. Hash пользователя доступен только для расследования конкретного сигнала.</span></div><label><span>С</span><input type="date" value={filters.date_from ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_from: event.target.value }))}/></label><label><span>По</span><input type="date" value={filters.date_to ?? ""} onChange={(event) => setFilters((old) => ({ ...old, date_to: event.target.value }))}/></label><label><span>Подразделение</span><select value={filters.department ?? ""} onChange={(event) => setFilters((old) => ({ ...old, department: event.target.value }))}><option value="">Все</option><option>Юридический отдел</option><option>Финансы</option><option>Продажи</option><option>HR</option><option>ИТ</option></select></label><label><span>Роль</span><select value={filters.role ?? ""} onChange={(event) => setFilters((old) => ({ ...old, role: event.target.value }))}><option value="">Все</option><option>Юрист</option><option>Аналитик</option><option>Менеджер по продажам</option><option>HR-партнёр</option></select></label><label><span>Пользователь (hash)</span><input value={filters.user ?? ""} onChange={(event) => setFilters((old) => ({ ...old, user: event.target.value }))} placeholder="user_id_hash" /></label><label><span>Агент</span><select value={filters.agent ?? ""} onChange={(event) => setFilters((old) => ({ ...old, agent: event.target.value }))}><option value="">Все</option>{agentsQuery.data?.data?.items.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></label><label><span>Модель</span><select value={filters.model ?? ""} onChange={(event) => setFilters((old) => ({ ...old, model: event.target.value }))}><option value="">Все</option><option>GigaChat Pro</option><option>YandexGPT 5 Pro</option><option>Corporate LLM 70B</option></select></label><label><span>Сценарий</span><select value={filters.scenario ?? ""} onChange={(event) => setFilters((old) => ({ ...old, scenario: event.target.value }))}><option value="">Все</option><option value="contract-review">Проверка договоров</option><option value="management-report">Управленческий отчёт</option><option value="crm-followup">Follow-up в CRM</option></select></label><label><span>Инструмент</span><select value={filters.tool ?? ""} onChange={(event) => setFilters((old) => ({ ...old, tool: event.target.value }))}><option value="">Все</option><option>Корпоративные документы</option><option>CRM</option><option>Почта</option><option>Браузер</option></select></label><div className="filter-actions"><button type="button" className="text-button" onClick={() => setFiltersOpen(false)}>Применить</button><button type="button" className="text-button muted" onClick={() => setFilters({ date_from: "2026-07-01", date_to: "2026-08-01" })}>Сбросить</button></div></section>}
       <div className="page-content">
         {enterpriseApiUnavailable && view !== "overview" && view !== "reports" && (
           <div className="demo-banner" role="status">

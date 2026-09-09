@@ -5,6 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
+      disallow: "/app",
     },
     sitemap: "https://radar.arvexo.ru/sitemap.xml",
     host: "https://radar.arvexo.ru",

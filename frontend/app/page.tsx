@@ -1,4 +1,4 @@
-import { RadarDashboard } from "../components/RadarDashboard";
+import { Landing } from "../components/Landing";
 
 const webApplicationSchema = {
   "@context": "https://schema.org",
@@ -32,7 +32,7 @@ export default function HomePage() {
           __html: JSON.stringify(webApplicationSchema).replace(/</g, "\\u003c"),
         }}
       />
-      <RadarDashboard />
+      <Landing />
     </>
   );
 }

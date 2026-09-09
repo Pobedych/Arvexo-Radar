@@ -931,12 +931,17 @@ export function SourcesView({
 
 export function MethodologyView({ initial }: { initial: MethodologyData }) {
   const [form, setForm] = useState(initial);
+  const [lastSaved, setLastSaved] = useState(initial);
   const [saved, setSaved] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const dirty = JSON.stringify(form) !== JSON.stringify(lastSaved);
   const mutation = useMutation({
     mutationFn: saveMethodology,
     onSuccess: (value) => {
       setForm(value);
+      setLastSaved(value);
       setSaved(true);
+      setConfirming(false);
       window.setTimeout(() => setSaved(false), 2500);
     },
   });
@@ -948,8 +953,8 @@ export function MethodologyView({ initial }: { initial: MethodologyData }) {
         <div>
           <h1>Настройки методики</h1>
           <p>
-            Все параметры расчёта редактируются и версионируются. Значения ниже
-            — demo default.
+            Параметры влияют на расчёт TCO, экономии и ROI. Значения ниже —
+            демонстрационные допущения.
           </p>
         </div>
         <DataBadge status="estimate" />
@@ -958,7 +963,8 @@ export function MethodologyView({ initial }: { initial: MethodologyData }) {
         className="methodology-layout"
         onSubmit={(event) => {
           event.preventDefault();
-          mutation.mutate(form);
+          if (dirty && !confirming) setConfirming(true);
+          if (dirty && confirming) mutation.mutate(form);
         }}
       >
         <article className="panel methodology-form">
@@ -1069,10 +1075,11 @@ export function MethodologyView({ initial }: { initial: MethodologyData }) {
             <button
               className="primary-button"
               type="submit"
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || !dirty}
             >
-              {mutation.isPending ? "Сохраняем..." : "Сохранить методику"}
+              {mutation.isPending ? "Сохраняем..." : confirming ? "Подтвердить сохранение" : "Проверить изменения"}
             </button>
+            {dirty && <button className="text-button muted" type="button" onClick={() => { setForm(lastSaved); setConfirming(false); }}>Отменить изменения</button>}
             {saved && (
               <span className="saved-message">
                 <CheckCircle size={16} weight="fill" />
@@ -1080,6 +1087,8 @@ export function MethodologyView({ initial }: { initial: MethodologyData }) {
               </span>
             )}
           </div>
+          {confirming && dirty && <div className="methodology-confirmation" role="status"><strong>Проверьте влияние перед сохранением.</strong><span>Изменённые допущения пересчитают показатели для следующих загрузок. В demo-режиме сохранение не меняет исторические данные.</span></div>}
+          {!dirty && <p className="methodology-state">Сохранённая версия · текущая сессия</p>}
         </article>
         <aside className="panel methodology-summary">
           <h2>Как считается результат</h2>
@@ -1115,7 +1124,7 @@ export function MethodologyView({ initial }: { initial: MethodologyData }) {
           <div className="panel-heading">
             <div>
               <h2>Тарифы моделей</h2>
-                <p>Effective-dated, настраиваются через Radar API</p>
+                <p>Периоды действия настраиваются через Radar API</p>
             </div>
           </div>
           {form.model_tariffs.length ? (
@@ -1126,11 +1135,11 @@ export function MethodologyView({ initial }: { initial: MethodologyData }) {
                   <small>с {String(tariff.effective_from).slice(0, 10)}</small>
                 </span>
                 <span>
-                  Input{" "}
+                  Входные токены{" "}
                   {rubles.format(Number(tariff.input_price_per_1m_tokens))} / 1M
                 </span>
                 <span>
-                  Output{" "}
+                  Выходные токены{" "}
                   {rubles.format(Number(tariff.output_price_per_1m_tokens))} /
                   1M
                 </span>
@@ -1146,7 +1155,7 @@ export function MethodologyView({ initial }: { initial: MethodologyData }) {
           <div className="panel-heading">
             <div>
               <h2>Нормативы сценариев</h2>
-              <p>Baseline, фактическое время и confidence</p>
+              <p>Исходное, фактическое время и уровень уверенности</p>
             </div>
           </div>
           {form.scenario_benchmarks.length ? (
@@ -1162,7 +1171,7 @@ export function MethodologyView({ initial }: { initial: MethodologyData }) {
                 </span>
                 <span>
                   {number.format(Number(benchmark.confidence_level) * 100)}%
-                  confidence
+                  уверенности
                 </span>
               </div>
             ))
