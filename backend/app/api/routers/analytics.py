@@ -78,10 +78,9 @@ async def overview(
         technical = OverviewResponse.model_validate(
             await repository.overview(_legacy_filters(filters))
         ).model_dump(mode="json")
-    # Database access is optional in demo mode. Driver and network failures are
-    # not guaranteed to be wrapped in SQLAlchemyError, especially on Windows,
-    # so the coherent in-memory demo payload remains the safe fallback.
-    except Exception:  # database may intentionally be absent in demo smoke runs
+    # Database access is optional in demo mode. Connection failures can surface
+    # as either SQLAlchemy errors or OS-level socket errors.
+    except (SQLAlchemyError, OSError):
         technical = {}
     requests = int(payload["usage_and_cost"][1]["value"])
     agents = payload["top_agents"]
