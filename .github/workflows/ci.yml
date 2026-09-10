@@ -133,6 +133,25 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: frontend
+          load: true
           push: false
+          tags: arvexo-radar-web:ci
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Smoke test frontend image
+        run: |
+          docker run -d --rm --name radar-web-ci -p 127.0.0.1:39090:3000 arvexo-radar-web:ci
+          trap 'docker stop radar-web-ci' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:39090/ | grep -q "From monitoring"; then
+              break
+            fi
+            if [ "$i" = 20 ]; then
+              docker logs radar-web-ci
+              exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:39090/images/arvexo-architecture.png >/dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:39090/app)" = "307"

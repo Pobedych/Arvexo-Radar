@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import "./radar.css";
+import "../../app/radar.css";
 
-import { RadarDashboard } from "../../components/RadarDashboard";
-import { RADAR_SESSION_COOKIE, readRadarSession } from "../../lib/arvexo-auth";
+import { RadarDashboard } from "../../../components/RadarDashboard";
+import { RADAR_SESSION_COOKIE, readRadarSession } from "../../../lib/arvexo-auth";
 
 export const metadata: Metadata = {
   title: "Дашборд — Arvexo Radar",
