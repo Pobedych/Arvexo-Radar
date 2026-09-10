@@ -262,14 +262,25 @@ jobs:
               exit 1
             fi
 
-            login_target="$(curl -sS -o /dev/null -w '%{redirect_url}' "${origin}/auth/login")"
-            case "$login_target" in
-              https://account.arvexo.ru/*) ;;
-              *) echo "::error::Unexpected login redirect: ${login_target}"; exit 1 ;;
-            esac
+            redirects_ready=false
+            for i in $(seq 1 20); do
+              login_target="$(curl -sS -o /dev/null -w '%{redirect_url}' "${origin}/auth/login")"
+              logout_target="$(curl -sS -o /dev/null -w '%{redirect_url}' "${origin}/auth/logout")"
 
-            logout_target="$(curl -sS -o /dev/null -w '%{redirect_url}' "${origin}/auth/logout")"
-            if [ "$logout_target" != "${origin}/" ]; then
-              echo "::error::Unexpected logout redirect: ${logout_target}"
+              case "$login_target" in
+                https://account.arvexo.ru/*)
+                  if [ "$logout_target" = "${origin}/" ]; then
+                    redirects_ready=true
+                    echo "Auth redirects healthy after ${i} attempt(s)."
+                    break
+                  fi
+                  ;;
+              esac
+
+              echo "Attempt ${i}/20: auth redirects not ready yet; login=${login_target} logout=${logout_target}"
+              sleep 3
+            done
+            if [ "$redirects_ready" != true ]; then
+              echo "::error::Auth redirects did not become healthy within 60s"
               exit 1
             fi
