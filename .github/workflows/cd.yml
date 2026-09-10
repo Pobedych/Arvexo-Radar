@@ -242,9 +242,25 @@ jobs:
             set -euo pipefail
             origin="https://radar.arvexo.ru"
 
-            curl -fsS "${origin}/" | grep -q "From monitoring"
-            curl -fsS "${origin}/images/arvexo-architecture.png" >/dev/null
-            curl -fsS "${origin}/images/prompt-radar.png" >/dev/null
+            # nginx can briefly reach the old upstream while Compose swaps
+            # containers. Wait for the public landing and its static assets
+            # instead of turning that expected handover into a failed CD run.
+            public_ready=false
+            for i in $(seq 1 20); do
+              if curl -fsS "${origin}/" | grep -q "From monitoring" \
+                 && curl -fsS "${origin}/images/arvexo-architecture.png" >/dev/null \
+                 && curl -fsS "${origin}/images/prompt-radar.png" >/dev/null; then
+                public_ready=true
+                echo "Public landing healthy after ${i} attempt(s)."
+                break
+              fi
+              echo "Attempt ${i}/20: public landing not ready yet, retrying in 3s..."
+              sleep 3
+            done
+            if [ "$public_ready" != true ]; then
+              echo "::error::Public landing did not become healthy within 60s"
+              exit 1
+            fi
 
             login_target="$(curl -sS -o /dev/null -w '%{redirect_url}' "${origin}/auth/login")"
             case "$login_target" in
