@@ -267,15 +267,12 @@ jobs:
               login_target="$(curl -sS -o /dev/null -w '%{redirect_url}' "${origin}/auth/login")"
               logout_target="$(curl -sS -o /dev/null -w '%{redirect_url}' "${origin}/auth/logout")"
 
-              case "$login_target" in
-                https://account.arvexo.ru/*)
-                  if [ "$logout_target" = "${origin}/" ]; then
-                    redirects_ready=true
-                    echo "Auth redirects healthy after ${i} attempt(s)."
-                    break
-                  fi
-                  ;;
-              esac
+              if [[ "$login_target" == https://account.arvexo.ru/* ]] \
+                 && [[ "$logout_target" == "${origin}/" ]]; then
+                redirects_ready=true
+                echo "Auth redirects healthy after ${i} attempt(s)."
+                break
+              fi
 
               echo "Attempt ${i}/20: auth redirects not ready yet; login=${login_target} logout=${logout_target}"
               sleep 3
