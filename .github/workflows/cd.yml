@@ -169,7 +169,23 @@ jobs:
             # Idempotent safety net: the api container already runs this on
             # start, but running it here surfaces a migration failure in the
             # deploy log instead of only in `docker compose logs api`.
-            docker compose -f docker-compose.prod.yml exec -T api alembic upgrade head
+            # The container can still be between creation and its own
+            # entrypoint migration when Compose returns. Retry the explicit
+            # verification instead of failing a healthy deploy on that race.
+            migration_verified=false
+            for i in $(seq 1 15); do
+              if docker compose -f docker-compose.prod.yml exec -T api alembic upgrade head; then
+                migration_verified=true
+                break
+              fi
+              echo "Migration verification attempt ${i}/15 failed; retrying in 2s..."
+              sleep 2
+            done
+            if [ "$migration_verified" != true ]; then
+              docker compose -f docker-compose.prod.yml ps
+              docker compose -f docker-compose.prod.yml logs --tail=80 api
+              exit 1
+            fi
             docker image prune -f
         env:
           API_IMAGE: ${{ steps.images.outputs.api }}
