@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { accountApiUrl, createRadarSession, radarCallbackUrl, radarClientId, RADAR_RETURN_COOKIE, RADAR_SESSION_COOKIE, RADAR_STATE_COOKIE, safeReturnTo, type ArvexoAccountUser } from "@/lib/arvexo-auth";
+import { accountApiUrl, createRadarSession, radarCallbackUrl, radarClientId, radarPublicUrl, RADAR_RETURN_COOKIE, RADAR_SESSION_COOKIE, RADAR_STATE_COOKIE, safeReturnTo, type ArvexoAccountUser } from "@/lib/arvexo-auth";
 
 export const dynamic = "force-dynamic";
 
 function authError(request: NextRequest, code: string) {
-  return NextResponse.redirect(new URL(`/auth/error?reason=${encodeURIComponent(code)}`, request.url));
+  return NextResponse.redirect(radarPublicUrl(`/auth/error?reason=${encodeURIComponent(code)}`, request.nextUrl.origin));
 }
 
 export async function GET(request: NextRequest) {
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     if (!body.account_user?.id || !body.account_user.email) return authError(request, "invalid_profile");
 
     const returnTo = safeReturnTo(request.cookies.get(RADAR_RETURN_COOKIE)?.value ?? null);
-    const response = NextResponse.redirect(new URL(returnTo, request.url));
+    const response = NextResponse.redirect(radarPublicUrl(returnTo, request.nextUrl.origin));
     response.cookies.set(RADAR_SESSION_COOKIE, await createRadarSession(body.account_user), {
       httpOnly: true,
       sameSite: "lax",

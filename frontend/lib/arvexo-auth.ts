@@ -87,3 +87,13 @@ export function radarClientId(): string {
 export function radarCallbackUrl(origin: string): string {
   return process.env.ARVEXO_RADAR_CALLBACK_URL ?? `${origin}/auth/callback`;
 }
+
+/**
+ * Build browser-facing Radar URLs from the configured callback origin.
+ * Behind a reverse proxy, NextRequest.url can contain the container's
+ * internal localhost origin, which must never leak into redirects.
+ */
+export function radarPublicUrl(path: string, fallbackOrigin: string): URL {
+  const publicOrigin = new URL(radarCallbackUrl(fallbackOrigin)).origin;
+  return new URL(path, publicOrigin);
+}

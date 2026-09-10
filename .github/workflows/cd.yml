@@ -213,3 +213,31 @@ jobs:
             docker compose -f docker-compose.prod.yml ps
             docker compose -f docker-compose.prod.yml logs --tail=80 api
             exit 1
+
+      - name: Smoke test public landing and redirects
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            origin="https://radar.arvexo.ru"
+
+            curl -fsS "${origin}/" | grep -q "From monitoring"
+            curl -fsS "${origin}/images/arvexo-architecture.png" >/dev/null
+            curl -fsS "${origin}/images/prompt-radar.png" >/dev/null
+
+            login_target="$(curl -sS -o /dev/null -w '%{redirect_url}' "${origin}/auth/login")"
+            case "$login_target" in
+              https://account.arvexo.ru/*) ;;
+              *) echo "::error::Unexpected login redirect: ${login_target}"; exit 1 ;;
+            esac
+
+            logout_target="$(curl -sS -o /dev/null -w '%{redirect_url}' "${origin}/auth/logout")"
+            if [ "$logout_target" != "${origin}/" ]; then
+              echo "::error::Unexpected logout redirect: ${logout_target}"
+              exit 1
+            fi
